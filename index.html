@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>Rocking dendrites</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<link href='//fonts.googleapis.com/css?family=Carme' rel='stylesheet' type='text/css'>
+		<meta property="og:url" content="https://www.clicktorelease.com/code/rocking-dendrites"/>
+
+		<meta property="og:title" content="Rocking Dendrites | Clicktorelease"/>
+		<meta property="og:description" content="All singing, all dancing dendrites, reacting to music. Complete with DOF and bokeh, all with WebGL. Check them out!"/>
+		<meta property="og:image" content="https://www.clicktorelease.com/code/rocking-dendrites/thumb.png"/>
+		<meta name="description" content="All singing, all dancing dendrites, reacting to music. Complete with DOF and bokeh, all with WebGL. Check them out!">
+		<meta itemprop="name" content="Rocking Dendrites | Clicktorelease">
+		<meta itemprop="description" content="All singing, all dancing dendrites, reacting to music. Complete with DOF and bokeh, all with WebGL. Check them out!">
+		<meta itemprop="image" content="https://www.clicktorelease.com/code/rocking-dendrites/thumb.png">
+
+		<style>
+			* {
+				margin: 0;
+				padding: 0;
+				box-sizing: border-box;
+				color: white;
+			}
+			select, option{
+				color: black;
+				font-family: 'Lucida Grande', sans-serif;
+				font-size: 11px;
+			}
+			body {
+				background:#fff;
+				padding:0;
+				margin:0;
+				font-weight: bold;
+				overflow:hidden;
+				border: 1px solid transparent;
+			}
+			#container{
+				position: absolute;
+				left: 0; top: 0; right: 0; bottom: 0;
+				background: #7d7e7d; /* Old browsers */
+background: -moz-radial-gradient(center, ellipse cover,  #7d7e7d 0%, #0e0e0e 100%); /* FF3.6+ */
+background: -webkit-gradient(radial, center center, 0px, center center, 100%, color-stop(0%,#7d7e7d), color-stop(100%,#0e0e0e)); /* Chrome,Safari4+ */
+background: -webkit-radial-gradient(center, ellipse cover,  #7d7e7d 0%,#0e0e0e 100%); /* Chrome10+,Safari5.1+ */
+background: -o-radial-gradient(center, ellipse cover,  #7d7e7d 0%,#0e0e0e 100%); /* Opera 12+ */
+background: -ms-radial-gradient(center, ellipse cover,  #7d7e7d 0%,#0e0e0e 100%); /* IE10+ */
+background: radial-gradient(ellipse at center,  #7d7e7d 0%,#0e0e0e 100%); /* W3C */
+filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', endColorstr='#0e0e0e',GradientType=1 ); /* IE6-9 fallback on horizontal gradient */
+			}
+			h1{
+				font-size: 48px;
+				text-transform: uppercase;
+				color: white;
+			}
+			#loading{
+				font-family: 'Carme', sans-serif;
+				text-shadow: 0 0 10px rgba( 0,0,0,1 );
+				pointer-events: none;
+				position: absolute;
+				left: 50%;
+				top: 50%;
+				width: 400px;
+				height: 200px;
+				margin-left: -200px;
+				margin-top: -100px;
+				-webkit-transition: opacity .5s ease-out;
+				-moz-transition: opacity .5s ease-out;
+				transition: opacity .5s ease-out;
+				opacity: 0;
+			}
+			#mobile{
+				font-family: 'Carme', sans-serif;
+				text-shadow: 0 0 10px rgba( 0,0,0,1 );
+				pointer-events: none;
+				position: absolute;
+				left: 50%;
+				top: 50%;
+				width: 400px;
+				height: 2em;
+				margin-left: -200px;
+				margin-top: -1em;
+				-webkit-transition: opacity .5s ease-out;
+				-moz-transition: opacity .5s ease-out;
+				transition: opacity .5s ease-out;
+				opacity: 0;
+			}
+			#credits {
+				position: absolute;
+				left: 0;
+				right :0;
+				bottom: 0;
+				padding: 10px;
+				font-family: arial, sans-serif;
+				font-size: 13px;
+				color: white;
+				font-weight: normal;
+				text-align: center;
+				text-shadow: 0 0 5px black;
+				-webkit-transition: opacity .5s ease-out;
+				-moz-transition: opacity .5s ease-out;
+				transition: opacity .5s ease-out;
+				opacity: 0;
+				pointer-events: none;
+			}
+			#credits a{ pointer-events: auto }
+			#social{ margin: 0 auto; margin-top: 10px; width: 400px; position: relative; height: 20px }
+			#twitterButton{ position: absolute; left: 50px; top: 0; }
+			#gPlusButton{ position: absolute; left: 190px; top: 0 }
+			#error{ display: none; position: absolute; left: 50%; margin-left: -300px; width: 600px; top: 30px; background-color: rgba( 167, 0, 0, .8 ); padding: 20px; border-radius: 5px; color: white; text-shadow: 0 -1px 0 rgba( 0,0,0,.8 ); text-align: center; font-family: arial, sans-serif; font-weight: normal; font-size: 14px }
+			#error p{ margin-bottom: 1em }
+			#instructions{ position: absolute; right: 300px; top: 10px; color: white; text-shadow: 0 -1px 0 rgba( 0,0,0,.8 );font-family: arial, sans-serif; font-weight: normal; font-size: 13px; text-align: right; pointer-events: none; -webkit-transition: opacity .5s ease-out; -moz-transition: opacity .5s ease-out; transition: opacity .5s ease-out; opacity: 0; }
+			#arrow{ position: absolute; right: -40px; top: 10px; width: 67px; height: 50px; background-image: url( arrow.png ) }
+			#fwa{ position: absolute; left: 0; top: 0; width: 100px; height: 100px; background-image: url( DayTopLeft.png );}
+
+			.hide{
+				-webkit-transition: opacity .5s ease-out;
+				-moz-transition: opacity .5s ease-out;
+				transition: opacity .5s ease-out;
+			}
+			@media screen and (max-width: 870px) {
+				#instructions{ display: none;}
+				#credits{ padding: 0 40px;}
+				#loading{ width: 300px; margin-left: -150px;}
+				#mobile{ width: 300px; margin-left: -150px; text-align: center;}
+			}
+
+		</style>
+	</head>
+
+	<body>
+
+		<div id="container" ></div>
+
+		<div id="loading">
+			<p>Loading data for</p>
+			<h1>Rocking dendrites</h1>
+			<p>Please wait...</p>
+		</div>
+
+		<div id="mobile">
+			<p>Tap here to start</p>
+		</div>
+
+		<div id="error" class="hide">
+			<div id="no-webgl" >
+				<p>Your browser doesn't seem to support WebGL.</p>
+				<p>Please load this site with a browser with WebGL support,<br/>like Mozilla Firefox, Google Chrome, Safari (MacOS)<br/>Opera Next does run, too, but a bit buggy.</p>
+			</div>
+		</div>
+
+		<div id="instructions" class="hide">
+			You can drag and drop any song (.mp3 and .ogg in Chrome and .ogg in Firefox)<br/>Don't forget to play with this values!
+			<div id="arrow"></div>
+		</div>
+
+		<div id="credits" class="hide">
+			<b>Rocking dendrites</b> · Code by <a href="http://twitter.com/thespite" rel="external">Jaume Sanchez Elias</a> with <a href="http://threejs.org" rel="external">three.js</a>, <a href="http://code.google.com/p/dat-gui/" rel="external" >dat.GUI</a> and <a href="https://github.com/jsantell/dancer.js" rel="external">Dancer.js</a><br/>Audio
+<a href="http://hunz.bandcamp.com/track/its-so-light" rel="external">“It's so Light”</a> by <a href="http://hunz.bandcamp.com/" rel="external">hunz</a>.
+			<div id="social">
+				<div id="twitterButton" >
+					<a style="display: inline-block" href="https://twitter.com/share" class="twitter-share-button" data-via="thespite">Tweet</a>
+					<script>
+						if (location.protocol != 'file:') {
+						!function(d,s,id){var js,fjs=d.getElementsByTagName(s)[0];if(!d.getElementById(id)){js=d.createElement(s);js.id=id;js.src="//platform.twitter.com/widgets.js";fjs.parentNode.insertBefore(js,fjs);}}(document,"script","twitter-wjs");
+						}
+					</script>
+				</div>
+				<div id="gPlusButton" >
+					<div class="g-plusone" style="display: inline-block" data-size="medium" data-annotation="inline"></div>
+					<script type="text/javascript">
+						if (location.protocol != 'file:') {
+						(function() {
+							var po = document.createElement('script'); po.type = 'text/javascript'; po.async = true;
+							po.src = 'https://apis.google.com/js/plusone.js';
+							var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(po, s);
+						})();
+						}
+					</script>
+				</div>
+			</div>
+
+		</div>
+
+		<a id="fwa" href="http://www.thefwa.com/site/rocking-dendrites" rel="external" class="hide"></a>
+
+		<script src="js/dancer.js"></script>
+		<script src="js/Detector.js"></script>
+		<script src="js/dat.gui.min.js"></script>
+		<script src="js/Three.js"></script>
+		<script src="js/tween.min.js"></script>
+		<script src="js/Stats.js"></script>
+
+		<script id="vs-particles" type="x-shader/x-vertex">
+
+			varying vec2 vUV;
+			varying float vDepth;
+			varying float vFocus;
+			varying float vAlpha;
+
+			uniform float scale;
+			uniform float z;
+			uniform float rotation;
+			uniform vec2 resolution;
+			uniform int fadeZ;
+
+			void main() {
+
+				vec4 mvPosition = modelViewMatrix * vec4( 0., 0., z, 1. );
+				vDepth = ( - mvPosition.z - 1. ) / ( 1000. - 1. );
+				float f = 0.0;
+				vAlpha = 1.0;
+				vFocus = 0.0;
+				if( vDepth < .75 ) {
+					// front
+					f = 1. - clamp( vDepth * ( 1. / .75 ), 0., 1. );
+					vFocus = f;
+					vAlpha = .6 + .3 * ( 1. - vFocus );
+				} else if( vDepth > .95 ) {
+					// back
+					f = clamp( ( vDepth - .95 ) * ( 1. / .95 ), 0., 1. );
+					vFocus = f;
+					vAlpha = .1 + .9 * ( 1. - vFocus );
+				}
+				if( fadeZ == 0 ) {
+					vAlpha = 1.;
+				}
+
+				vec2 tScale = resolution.y / resolution.x * ( 2.5 * scale + .5 * f ) * vec2( 1., resolution.x / resolution.y ) ;
+				vec2 uvOffset = vec2( 0. );
+				vec2 uvScale = vec2( 1. );
+
+				vUV = uvOffset + uv * uvScale;
+
+				vec2 alignedPosition = position.xy;
+
+				vec2 rotatedPosition;
+				rotatedPosition.x = ( cos( rotation ) * alignedPosition.x - sin( rotation ) * alignedPosition.y ) * tScale.x;
+				rotatedPosition.y = ( sin( rotation ) * alignedPosition.x + cos( rotation ) * alignedPosition.y ) * tScale.y;
+
+				vec4 finalPosition;
+
+				finalPosition = projectionMatrix * modelViewMatrix * vec4( 0.0, 0.0, 0.0, 1.0 );
+				finalPosition.xy += rotatedPosition;
+
+				gl_Position = finalPosition;
+
+			}
+
+		</script>
+
+		<script id="fs-particles" type="x-shader/x-fragment">
+
+			uniform sampler2D middle;
+			//uniform sampler2D near;
+			//uniform sampler2D far;
+			uniform vec3 colour;
+			uniform float opacity;
+			uniform int fadeZ;
+
+			varying vec2 vUV;
+			varying float vDepth;
+			//varying float vFocus;
+			varying float vAlpha;
+
+			void main() {
+
+				/*vec4 nC = texture2D( near, vUV );
+				vec4 mC = texture2D( middle, vUV );
+				vec4 fC = texture2D( far, vUV );
+				vec4 fColour;
+				if( vDepth < .5 ) {
+					fColour = mix( mC, nC, vFocus );
+				} else {
+					fColour = mix( mC, fC, vFocus );
+				}*/
+				vec4 fColour = texture2D( middle, vUV );
+				fColour.rgb *= colour;
+				fColour.rgb *= .75 + .45 * vec3( 1. - vDepth );
+				fColour.a *= vAlpha * opacity;
+				gl_FragColor = vec4( fColour.rgb, fColour.a );
+
+			}
+
+
+		</script>
+
+		<script>
+
+			'use strict'
+
+			var container = document.getElementById( 'container' ), stats;
+
+			var camera, scene, renderer;
+
+			var group;
+			var time = 0;
+
+			var mouseX = 0, mouseY = 0;
+
+			var windowHalfX = window.innerWidth / 2;
+			var windowHalfY = window.innerHeight / 2;
+			var startTime = Date.now();
+			var mesh, particlesMesh, material, indexArray = [], pulsateTime = 0;
+			var fov = 90, nfov = fov, distance = -1200, ndistance = distance, isUserInteracting, isUserPinching, onPointerDownPointerX, onPointerDownPointerY,
+			position = { x:0, y: 0 }, onPointerDownLon, onPointerDownLat, lon = 0, lat = 0, nlon = lon, nlat = lat, ellapsedFactor, phi, theta;
+
+			var loading = document.getElementById( 'loading' ),
+				mobile = document.getElementById( 'mobile' ),
+				credits = document.getElementById( 'credits' ),
+				instructions = document.getElementById( 'instructions' );
+
+			var dancer, audio;
+
+			function HSVToHSL( h, s, v ) {
+
+				var hh = h;
+				var ll = ( 2 - s ) * v;
+				var ss = s * v;
+				ss /= ( ll <= 1 ) ? ll : 2 - ll;
+				ll /= 2;
+
+				return { h: hh, s: ss, l: ll }
+
+			}
+
+			function start() {
+
+				loading.style.opacity = 0;
+				credits.style.opacity = 1;
+				instructions.style.opacity = 1;
+
+			}
+
+			function loadAudio( src ) {
+
+				if( audio ) { audio.pause(); audio = null; }
+				if( dancer ) { dancer.pause(); dancer = null; }
+
+				audio = new Audio();
+				dancer = new Dancer();
+
+				var ext = '';
+		        if( (audio.canPlayType && audio.canPlayType('audio/ogg; codecs="vorbis"').replace(/no/, '')) ) ext = 'ogg';
+		        if( (audio.canPlayType && audio.canPlayType('audio/mpeg;').replace(/no/, '')) ) ext = 'mp3';
+
+				audio.src = src || 'hunz - It\'s so Light.' + ext;
+				dancer.load( audio );
+				dancer.play();
+				start();
+
+			}
+
+			function createDendrite( settings ) {
+
+				if( mesh ) scene.remove( mesh );
+
+				mesh = new THREE.Object3D();
+				indexArray = [];
+				var vCount = 0;
+
+				var
+					arms = settings.arms,
+					twistiness = settings.twistiness,
+					randomness = settings.randomness,
+					minLength = settings.minLength,
+					maxLength = settings.maxLength,
+					length;
+
+				var pos = new THREE.Vector3( 0,0,0 );
+				var scale = .5;
+
+				var normalTexture, blurTexture;
+				switch( dParams.finish ) {
+					case 'solid':
+						normalTexture = THREE.ImageUtils.loadTexture( "sprite-shadow.png" );
+						blurTexture = THREE.ImageUtils.loadTexture( "sprite.png" );
+						break;
+					case 'metallic':
+						normalTexture = THREE.ImageUtils.loadTexture( "noise.png" );
+						blurTexture = THREE.ImageUtils.loadTexture( "noise2.png" );
+						break;
+					case 'abstract':
+						normalTexture = THREE.ImageUtils.loadTexture( "sprite-round-sharp.png" );
+						blurTexture = THREE.ImageUtils.loadTexture( "sprite-round.png" );
+						break;
+					case 'cloudy':
+						normalTexture = THREE.ImageUtils.loadTexture( "cloud.png" );
+						blurTexture = THREE.ImageUtils.loadTexture( "cloud-blur.png" );
+						break;
+					case 'fuzzy':
+						normalTexture = THREE.ImageUtils.loadTexture( "splatter.png" );
+						blurTexture = THREE.ImageUtils.loadTexture( "splatter-blur.png" );
+						break;
+				}
+
+				var dir = new THREE.Vector3();
+				var ndir = new THREE.Vector3();
+				var diff = new THREE.Vector3();
+				var offset = new THREE.Vector3();
+				var udir = new THREE.Vector3();
+				var c = new THREE.Color();
+
+				for( var a = 0; a < arms; a ++ ) {
+
+					indexArray[ a ] = [];
+					length = minLength + Math.random() * ( maxLength - minLength );
+					scale = .5;
+
+					pos.set( 0, 0, 0 );
+					dir.set( .5 - Math.random(), .5 - Math.random(), .5 - Math.random() );
+					dir.normalize();
+
+					for( var b = 0; b < length; b ++ ) {
+
+						ndir.set( .5 - Math.random(), .5 - Math.random(), .5 - Math.random() );
+						ndir.normalize();
+						diff.set( dir.x, dir.y, dir.z );
+						diff.sub( ndir );
+						diff.multiplyScalar( twistiness );
+						dir.add( diff );
+						dir.normalize();
+
+						scale += .1 * ( .5 - Math.random() );
+						if( scale < .2 ) scale = .2;
+						if( scale > .3 ) scale = .3;
+
+						scale -= .001 * b;
+						scale *= 1.1;
+
+						if( scale < 0 ) scale = 0;
+
+						offset.set( .5 - Math.random(), .5 - Math.random(), .5 - Math.random() );
+						offset.normalize();
+
+						udir.set( dir.x, dir.y, dir.z );
+						offset.normalize();
+						offset.multiplyScalar( randomness );
+						udir.add( offset );
+						udir.normalize();
+						udir.multiplyScalar( scale * 50 );
+						pos.add( udir );
+
+						var hs = { s: .9 + .7 * scale, v: .5 + 2 * scale - .5 * ( 1 - 2 * ( b / length ) ) };
+						hs.s -= .1 * b / length;
+						hs.v += .8 * b / length;
+						var hsl = HSVToHSL( hs.h, hs.s, hs.v );
+						c.setHSL( .93, hsl.s, hsl.l );
+
+						var material = new THREE.ShaderMaterial( {
+
+							uniforms: {
+
+								middle: { type: "t", value: normalTexture },
+								far: { type: "t", value: blurTexture },
+								near: { type: "t", value: blurTexture },
+								scale: { type: 'f', value: scale },
+								originalScale: { type: 'f', value: scale },
+								impulse: { type: 'f', value: 0 },
+								colour: { type: 'c', value: new THREE.Color( c.r, c.g, c.b ) },
+								baseColour: { type: 'v3', value: new THREE.Vector3( .93, hs.s, hs.v ) },
+								z: { type: 'f', value: pos.z },
+								rotation: { type: 'f', value: ( dParams.finish == 'metallic' )?0:Math.random() * 2 * Math.PI },
+								arm: { type: 'f', value: a },
+								opacity: { type: 'f', value: 1 },
+								resolution: { type: 'v2', value: new THREE.Vector2( window.innerWidth, window.innerHeight ) },
+								fadeZ: { type: 'i', value: 1 }
+
+							},
+							vertexShader: document.getElementById( 'vs-particles' ).textContent,
+							fragmentShader: document.getElementById( 'fs-particles' ).textContent,
+							transparent: true
+
+						} );
+
+						var plane = new THREE.Mesh( new THREE.PlaneGeometry( 300, 300 ), material );
+						plane.position.set( pos.x, pos.y, pos.z );
+						mesh.add( plane );
+
+						indexArray[ a ].push( vCount );
+						vCount++;
+
+					}
+
+				}
+
+				scene.add( mesh );
+
+				var occlusion = [];
+				for( var j = 0; j < mesh.children.length; j++ ) {
+					occlusion[ j ] = { v: 0, c: 0 };
+					for( var i = 0; i < mesh.children.length; i++ ) {
+						if( i != j ) {
+							/*var p = new THREE.Vector3();
+							p.copy( mesh.children[ j ].position );
+							p.sub( p, mesh.children[ i ].position );
+							var d = p.lengthSq();
+							if( d < 100000 ) {
+								occlusion[ j ].c++;
+								occlusion[ j ].v += 1 - d / 100000;
+							}*/
+						}
+					}
+				}
+
+				for( var j = 0; j < mesh.children.length; j++ ) {
+					if( occlusion[ j ].c > 0 ) {
+						mesh.children[ j ].material.uniforms.baseColour.value.y -= .1 * occlusion[ j ].v / occlusion[ j ].c
+						mesh.children[ j ].material.uniforms.baseColour.value.z -= .75 * occlusion[ j ].v / occlusion[ j ].c;
+					}
+				}
+
+			}
+
+
+			var dendriteParams = function() {
+				this.arms = 5;
+				this.twistiness = .2;
+				this.randomness = .25;
+				this.minLength = 60;
+				this.maxLength = 120;
+				this.animate = true;
+				this.pulsate = false;
+				this.particles = true;
+				this.finish = 'metallic';
+				this.randomize = function() {
+					dParams.arms = 1 + Math.round( Math.random() * 20 );
+					dParams.minLength = 1 + Math.round( Math.random() * 199 );
+					dParams.maxLength = dParams.minLength + Math.round( Math.random() * ( 200 - dParams.minLength ) );
+					dParams.twistiness = Math.random() * .3;
+					dParams.randomness = Math.random() * .6;
+					dParams.render();
+				};
+				this.render = function() {
+					createDendrite( {
+						arms: this.arms,
+						twistiness: this.twistiness,
+						randomness: this.randomness,
+						minLength: this.minLength,
+						maxLength: this.maxLength
+					} );
+				};
+				this.fullscreen = function() {
+					var docElm = container;
+					if (docElm.requestFullscreen) {
+							docElm.requestFullscreen();
+					}
+					else if (docElm.mozRequestFullScreen) {
+							docElm.mozRequestFullScreen();
+					}
+					else if (docElm.webkitRequestFullScreen) {
+							docElm.webkitRequestFullScreen();
+					}
+				}
+			};
+
+			var dParams = new dendriteParams();
+
+			var links = document.querySelectorAll( 'a[rel=external]' );
+			for( var j = 0; j < links.length; j++ ) {
+				var a = links[ j ];
+				a.addEventListener( 'click', function( e ) {
+					window.open( this.href, '_blank' );
+					e.preventDefault();
+				}, false );
+			}
+
+			if( Detector.webgl ) {
+				window.addEventListener( 'load', init, false );
+			} else {
+				loading.style.display = 'none';
+				document.getElementById( 'error' ).style.display = 'block';
+			}
+
+			function init() {
+
+				var gui = new dat.GUI();
+				var geometry = gui.addFolder('Dendrite shape');
+				geometry.add( dParams, 'randomize');
+				geometry.add( dParams, 'arms', 1, 50 ).listen();
+				geometry.add( dParams, 'minLength', 1, 200 ).listen();
+				geometry.add( dParams, 'maxLength', 1, 200 ).listen();
+				geometry.add( dParams, 'twistiness', 0, .3 ).listen();
+				geometry.add( dParams, 'randomness', 0, .6 ).listen();
+				geometry.add( dParams, 'finish', [ 'metallic', 'solid', 'abstract', 'cloudy', 'fuzzy' ] );
+				geometry.add( dParams, 'render');
+				var actions = gui.addFolder('Actions');
+				actions.add( dParams, 'animate' );
+				actions.add( dParams, 'pulsate' );
+				actions.add( dParams, 'particles' );
+				actions.add( dParams, 'fullscreen' );
+				actions.close( true );
+
+				var dropzone = container;
+
+				dropzone.addEventListener('dragenter', function(event){
+					this.style.backgroundColor = 'rgba( 255,255,255,.2 )';
+				}, true );
+
+				dropzone.addEventListener('dragleave', function(event){
+					this.style.backgroundColor = 'transparent';
+				}, true );
+
+				dropzone.addEventListener('dragover', function(event) {
+					this.style.backgroundColor = 'rgba( 255,255,255,.2 )';
+					event.preventDefault();
+				}, true);
+
+				dropzone.addEventListener('drop', function(event) {
+
+					loading.style.opacity = 1;
+
+					this.style.backgroundColor = 'transparent';
+					event.preventDefault();
+					var allTheFiles = event.dataTransfer.files;
+					var reader = new FileReader();
+					reader.onload = function(e) {
+						try {
+							loadAudio( this.result );
+						} catch( e ) {
+							alert( 'Couldn\'t read that file. Make sure it\'s an mp3 or ogg file (Chrome) or ogg file (Firefox).' );
+							start();
+						}
+					};
+					reader.readAsDataURL( allTheFiles[ 0 ] );
+				}, true);
+
+				camera = new THREE.PerspectiveCamera( 70, window.innerWidth / window.innerHeight, 1, 5000 );
+				camera.position.z = 1000;
+				camera.target = new THREE.Vector3();
+
+				scene = new THREE.Scene();
+
+				dParams.render();
+
+				renderer = new THREE.WebGLRenderer( { alpha: true } );
+				renderer.setSize( window.innerWidth, window.innerHeight );
+
+				container.appendChild( renderer.domElement );
+
+				stats = new Stats();
+				stats.domElement.style.position = 'absolute';
+				stats.domElement.style.top = '0px';
+				stats.domElement.style.zIndex = 100;
+				//container.appendChild( stats.domElement );
+
+				window.addEventListener( 'resize', onWindowResize, false );
+
+				container.addEventListener( 'mousedown', onMouseDown, false );
+				container.addEventListener( 'mousemove', onMouseMove, false );
+				container.addEventListener( 'mouseup', onMouseUp, false );
+				container.addEventListener( 'mousewheel', onMouseWheel, false );
+				container.addEventListener( 'DOMMouseScroll', onMouseWheel, false);
+				container.addEventListener( 'touchstart', onTouchStart, false );
+				container.addEventListener( 'touchmove', onTouchMove, false );
+				container.addEventListener( 'touchend', onTouchEnd, false );
+				container.addEventListener( 'touchcancel', onTouchEnd, false );
+
+				createParticles();
+
+				//if( 'ontouchstart' in document.documentElement ) {
+					mobile.style.opacity = 1;
+					mobile.style.pointerEvents = 'auto';
+					mobile.addEventListener( 'click', function() {
+						loadAudio();
+						mobile.style.pointerEvents = 'none';
+						mobile.style.opacity = 0;
+					} );
+				/*} else {
+					loading.style.opacity = 1;
+					setTimeout( loadAudio, 1000 );
+				}*/
+				animate();
+
+				//start();
+
+			}
+
+			function createParticles() {
+
+				var texture = THREE.ImageUtils.loadTexture( 'coc-blur.png' );
+				var blurTexture = THREE.ImageUtils.loadTexture( 'coc.png' );
+				var sharpTexture = THREE.ImageUtils.loadTexture( 'coc.png' );
+
+				var size = 2000;
+				particlesMesh = new THREE.Object3D();
+				for( var j = 0; j < 100; j++ ) {
+
+					var z = ( .5 - Math.random() ) * size;
+					var material = new THREE.ShaderMaterial( {
+
+						uniforms: {
+
+							middle: { type: "t", value: sharpTexture },
+							//far: { type: "t", value: sharpTexture },
+							//near: { type: "t", value: sharpTexture },
+							scale: { type: 'f', value: 1 },
+							originalScale: { type: 'f', value: 1 },
+							impulse: { type: 'f', value: 0 },
+							colour: { type: 'v3', value: new THREE.Vector3( 255, 255, 255 ) },
+							baseColour: { type: 'v3', value: new THREE.Vector3( 0,0,0 ) },
+							z: { type: 'f', value: z },
+							rotation: { type: 'f', value: 0 },
+							opacity: { type: 'f', value: .2 + Math.random() * .2 },
+							resolution: { type: 'v2', value: new THREE.Vector2( window.innerWidth, window.innerHeight ) },
+							fadeZ: { type: 'i', value: 1 }
+
+						},
+						vertexShader: document.getElementById( 'vs-particles' ).textContent,
+						fragmentShader: document.getElementById( 'fs-particles' ).textContent,
+						transparent: true
+
+					} );
+
+					var s = 100 + Math.random() * 100;
+					var plane = new THREE.Mesh( new THREE.PlaneGeometry( s, s ), material );
+					plane.position.set( ( .5 - Math.random() ) * size, ( .5 - Math.random() ) * size, z );
+					particlesMesh.add( plane );
+				}
+				scene.add( particlesMesh );
+
+			}
+
+			function onWindowResize() {
+
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+
+				renderer.setSize( window.innerWidth, window.innerHeight );
+
+				for( var j = 0; j < mesh.children.length; j++ ) {
+					mesh.children[ j ].material.uniforms.resolution.value.set( window.innerWidth, window.innerHeight );
+				}
+
+				if( particlesMesh ) {
+					for( var j = 0; j < particlesMesh.children.length; j++ ) {
+						particlesMesh.children[ j ].material.uniforms.resolution.value.set( window.innerWidth, window.innerHeight );
+					}
+				}
+
+			}
+
+			/*function onContainerMouseDown( event ) {
+
+				event.preventDefault();
+
+				isUserInteracting = true;
+				var el = document.querySelectorAll( '.hide' );
+				for( var j = 0; j < el.length; j++ ) {
+					el[ j ].style.opacity = 0;
+					el[ j ].style.pointerEvents = 'none';
+				}
+
+				onPointerDownPointerX = event.clientX;
+				onPointerDownPointerY = event.clientY;
+
+				onPointerDownLon = lon;
+				onPointerDownLat = lat;
+
+			}
+
+			function onContainerMouseMove( event ) {
+
+				event.preventDefault();
+
+				var lookSpeed = .15;
+				var f = fov / 500;
+				if ( isUserInteracting ) {
+					var dx = ( onPointerDownPointerX - event.clientX ) * f;
+					var dy = ( event.clientY - onPointerDownPointerY ) * f;
+					position.x = dx + onPointerDownLon;
+					position.y = dy + onPointerDownLat;
+				}
+
+				if( !!document.pointerLockElement ) {
+					var
+						movementX = event.movementX || event.mozMovementX || event.webkitMovementX || 0,
+						movementY = event.movementY || event.mozMovementY || event.webkitMovementY || 0;
+
+					position.x += .1 * movementX;
+					position.y -= .1 * movementY;
+				}
+
+			}
+
+			function onContainerMouseWheel( event ) {
+
+				event = event ? event : window.event;
+				nfov = fov - ( event.detail ? event.detail * -5 : event.wheelDelta / 8 );
+				if( nfov > 150 ) nfov = 150;
+				if( nfov < 40 ) nfov = 40;
+
+				ndistance = distance + ( event.detail ? event.detail * -5 : event.wheelDelta / 8 ) * 20;
+
+			}
+
+			function onContainerMouseUp( event ) {
+
+				event.preventDefault();
+				isUserInteracting = false;
+				var el = document.querySelectorAll( '.hide' );
+				for( var j = 0; j < el.length; j++ ) {
+					el[ j ].style.opacity = 1;
+					el[ j ].style.pointerEvents = 'auto';
+				}
+
+			}*/
+
+			function onMouseWheel( event ) {
+
+				event = event ? event : window.event;
+				nfov = fov - ( event.detail ? event.detail * -5 : event.wheelDelta / 8 );
+				if( nfov > 150 ) nfov = 150;
+				if( nfov < 40 ) nfov = 40;
+
+				ndistance = distance + ( event.detail ? event.detail * -5 : event.wheelDelta / 8 ) * 20;
+				console.log( ndistance );
+			}
+
+			function hideUI() {
+
+				var el = document.querySelectorAll( '.hide' );
+				for( var j = 0; j < el.length; j++ ) {
+					el[ j ].style.opacity = 0;
+					el[ j ].style.pointerEvents = 'none';
+				}
+
+			}
+
+			function showUI() {
+
+				var el = document.querySelectorAll( '.hide' );
+				for( var j = 0; j < el.length; j++ ) {
+					el[ j ].style.opacity = 1;
+					el[ j ].style.pointerEvents = 'auto';
+				}
+
+			}
+
+			function onMouseDown( event ) {
+
+				hideUI();
+				event.preventDefault();
+
+				isUserInteracting = true;
+
+				onPointerDownPointerX = event.clientX;
+				onPointerDownPointerY = event.clientY;
+
+				onPointerDownLon = lon;
+				onPointerDownLat = lat;
+
+			}
+
+			function onMouseMove( event ) {
+
+				if ( isUserInteracting ) {
+
+					nlon = ( event.clientX - onPointerDownPointerX ) * 0.1 + onPointerDownLon;
+					nlat = -( event.clientY - onPointerDownPointerY ) * 0.1 + onPointerDownLat;
+
+				}
+
+			}
+
+			function onMouseUp( event ) {
+
+				showUI();
+				isUserInteracting = false;
+
+			}
+
+			var oDist = 0, oFov;
+
+			function onTouchStart( event ) {
+
+				hideUI();
+
+				event.preventDefault();
+
+				if( event.touches.length == 2 ) {
+
+					var t = event.touches;
+					oDist = Math.sqrt(
+							Math.pow( t[ 0 ].clientX - t[ 1 ].clientX, 2 ) +
+							Math.pow( t[ 0 ].clientY - t[ 1 ].clientY, 2 ) );
+					oFov = nfov;
+
+					isUserPinching = true;
+
+				} else {
+
+					var t = event.touches[ 0 ];
+					isUserInteracting = true;
+
+					onPointerDownPointerX = t.clientX;
+					onPointerDownPointerY = t.clientY;
+
+					onPointerDownLon = lon;
+					onPointerDownLat = lat;
+
+				}
+
+			}
+
+			function onTouchMove( event ) {
+
+				if( event.touches.length == 2 ) {
+
+					var t = event.touches;
+					var dist = Math.sqrt(
+							Math.pow( t[ 0 ].clientX - t[ 1 ].clientX, 2 ) +
+							Math.pow( t[ 0 ].clientY - t[ 1 ].clientY, 2 ) );
+
+					nfov = oFov + .1 * ( oDist - dist );
+					ndistance = oDist + .1 * dist;
+
+				} else {
+
+					var t = event.touches[ 0 ];
+					nlon = ( t.clientX - onPointerDownPointerX ) * 0.1 + onPointerDownLon;
+					nlat = -( t.clientY - onPointerDownPointerY ) * 0.1 + onPointerDownLat;
+
+				}
+
+			}
+
+			function onTouchEnd( event ) {
+
+				showUI();
+
+				isUserInteracting = false;
+				isUserPinching = false;
+
+			}
+
+
+			function animate() {
+
+				requestAnimationFrame( animate );
+
+				render();
+				stats.update();
+
+			}
+
+			function pow() {
+				ndistance = -500;
+				setTimeout( function() {
+					ndistance = -800;
+				}, 500 );
+			}
+
+			function render() {
+
+				time = Date.now();
+				var ellapsedTime = time - startTime;
+				startTime = time;
+				var delta = ellapsedTime / 16;
+
+				if( particlesMesh.parent && !dParams.particles ) {
+					scene.remove( particlesMesh );
+				}
+
+				if( !particlesMesh.parent && dParams.particles ) {
+					scene.add( particlesMesh );
+				}
+
+				if( dParams.pulsate ) {
+					pulsateTime += delta;
+					for( var j = 0; j < mesh.children.length; j++ ) {
+						mesh.children[ j ].material.uniforms.scale.value = mesh.children[ j ].material.uniforms.originalScale.value + .25 * mesh.children[ j ].material.uniforms.originalScale.value * Math.sin( .1 * j + .05 * pulsateTime );
+					}
+				}
+
+				if( dParams.animate && dancer ) {
+
+					var c = new THREE.Color();
+					var hue = .5 + .5 * Math.sin( .0001 * time );
+					hue += .01 * dancer.getFrequency( 2 );
+					if( hue > .99 ) hue = .99;
+					for( var j = 0; j < mesh.children.length; j++ ) {
+						var u = mesh.children[ j ].material.uniforms;
+						var s = .5 * ( .5 + .5 * Math.sin( .01 * ( .1 * j + .1 * time ) ) );
+						var hsl = HSVToHSL( hue, u.baseColour.value.y - .1 * dancer.getFrequency( 0 ), u.baseColour.value.z + s + dancer.getFrequency( 0 ) )
+						mesh.children[ j ].material.uniforms.colour.value.setHSL( hsl.h, hsl.s, hsl.l );
+					}
+
+					mesh.rotation.x += delta * .1 * dancer.getFrequency( 0 );
+					mesh.rotation.y += delta * .1 * dancer.getFrequency( 1 );
+					mesh.rotation.z += delta * .1 * dancer.getFrequency( 2 );
+
+					if( particlesMesh ) {
+						particlesMesh.rotation.x += delta * .06 * dancer.getFrequency( 0 );
+						particlesMesh.rotation.y += delta * .06 * dancer.getFrequency( 1 );
+						particlesMesh.rotation.z += delta * .06 * dancer.getFrequency( 2 );
+						var s = 1 + .1 * dancer.getFrequency( 0 );
+						particlesMesh.scale.set( s, s, s );
+					}
+
+					position.x += delta * dancer.getFrequency( 1 );
+					position.y += delta * dancer.getFrequency( 0 );
+
+					ndistance =  - 1500 + 10000 * .1 * ( dancer.getFrequency( 0, 2 ) );
+
+					/*for( var j = 0; j < indexArray.length; j++ ) {
+						var a = indexArray[ j ];
+						for( var i = a.length - 1; i > 0; i-- ) {
+							var up = mesh.children[ a[ i - 1 ] ].material.uniforms;
+							var uc = mesh.children[ a[ i ] ].material.uniforms;
+							var impulse = up.impulse.value;
+							//impulse = uc.impulse.value + ( impulse - uc.impulse.value ) * .99;
+							//impulse -= .005;
+							if( impulse < uc.originalScale.value ) impulse = uc.originalScale.value;
+							uc.impulse.value = impulse;
+						}
+						var f = .1 * dancer.getFrequency( j );
+						//if( f > .15 ) f = .15;
+						var c = mesh.children[ a[ 0 ] ].material.uniforms;
+						c.impulse.value = f;
+						for( var i = 0; i < a.length; i++ ) {
+							var uc = mesh.children[ a[ i ] ].material.uniforms;
+							uc.scale.value = c.originalScale.value + uc.impulse.value;
+						}
+					}*/
+
+				}
+
+				if( ndistance < -1500 ) ndistance = -1500;
+				if( ndistance > -500 ) ndistance = -500;
+
+				distance += ( ndistance - distance ) * .1 * delta;
+
+				var s = .15 * delta;
+				lon += ( nlon - lon ) * s;
+				lat += ( nlat - lat ) * s;
+
+				lat = Math.max( - 85, Math.min( 85, lat ) );
+				phi = ( 90 - lat ) * Math.PI / 180;
+				theta = lon * Math.PI / 180;
+
+				if( particlesMesh ) {
+					camera.position.x = distance * Math.sin( phi ) * Math.cos( theta );
+					camera.position.y = distance * Math.cos( phi );
+					camera.position.z = distance * Math.sin( phi ) * Math.sin( theta );
+				}
+
+				camera.lookAt( camera.target );
+
+				renderer.render( scene, camera );
+
+			}
+
+		</script>
+
+	</body>
+</html>
