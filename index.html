@@ -5,6 +5,7 @@
 		<meta charset="utf-8">
 		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
 		<link href='//fonts.googleapis.com/css?family=Carme' rel='stylesheet' type='text/css'>
+		<link href='guspira.min.css' rel='stylesheet' type='text/css'>
 		<meta property="og:url" content="https://www.clicktorelease.com/code/rocking-dendrites"/>
 
 		<meta property="og:title" content="Rocking Dendrites | Clicktorelease"/>
@@ -20,15 +21,10 @@
 				margin: 0;
 				padding: 0;
 				box-sizing: border-box;
-				color: white;
-			}
-			select, option{
-				color: black;
-				font-family: 'Lucida Grande', sans-serif;
-				font-size: 11px;
 			}
 			body {
 				background:#fff;
+				color: white;
 				padding:0;
 				margin:0;
 				font-weight: bold;
@@ -77,8 +73,10 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 				top: 50%;
 				width: 400px;
 				height: 2em;
+				line-height: 2em;
 				margin-left: -200px;
 				margin-top: -1em;
+				text-align: center;
 				-webkit-transition: opacity .5s ease-out;
 				-moz-transition: opacity .5s ease-out;
 				transition: opacity .5s ease-out;
@@ -102,15 +100,16 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 				opacity: 0;
 				pointer-events: none;
 			}
-			#credits a{ pointer-events: auto }
+			#credits a{ pointer-events: auto; color: white }
 			#social{ margin: 0 auto; margin-top: 10px; width: 400px; position: relative; height: 20px }
 			#twitterButton{ position: absolute; left: 50px; top: 0; }
 			#gPlusButton{ position: absolute; left: 190px; top: 0 }
 			#error{ display: none; position: absolute; left: 50%; margin-left: -300px; width: 600px; top: 30px; background-color: rgba( 167, 0, 0, .8 ); padding: 20px; border-radius: 5px; color: white; text-shadow: 0 -1px 0 rgba( 0,0,0,.8 ); text-align: center; font-family: arial, sans-serif; font-weight: normal; font-size: 14px }
 			#error p{ margin-bottom: 1em }
-			#instructions{ position: absolute; right: 300px; top: 10px; color: white; text-shadow: 0 -1px 0 rgba( 0,0,0,.8 );font-family: arial, sans-serif; font-weight: normal; font-size: 13px; text-align: right; pointer-events: none; -webkit-transition: opacity .5s ease-out; -moz-transition: opacity .5s ease-out; transition: opacity .5s ease-out; opacity: 0; }
+			#instructions{ position: absolute; right: 365px; top: 10px; color: white; text-shadow: 0 -1px 0 rgba( 0,0,0,.8 );font-family: arial, sans-serif; font-weight: normal; font-size: 13px; text-align: right; pointer-events: none; -webkit-transition: opacity .5s ease-out; -moz-transition: opacity .5s ease-out; transition: opacity .5s ease-out; opacity: 0; }
 			#arrow{ position: absolute; right: -40px; top: 10px; width: 67px; height: 50px; background-image: url( arrow.png ) }
 			#fwa{ position: absolute; left: 0; top: 0; width: 100px; height: 100px; background-image: url( DayTopLeft.png );}
+			#gui{ position: absolute; right: 10px; top: 10px; width: 340px; z-index: 10; font-weight: normal }
 
 			.hide{
 				-webkit-transition: opacity .5s ease-out;
@@ -121,7 +120,7 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 				#instructions{ display: none;}
 				#credits{ padding: 0 40px;}
 				#loading{ width: 300px; margin-left: -150px;}
-				#mobile{ width: 300px; margin-left: -150px; text-align: center;}
+				#mobile{ width: 300px; margin-left: -150px; }
 			}
 
 		</style>
@@ -130,6 +129,8 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 	<body>
 
 		<div id="container" ></div>
+
+		<div id="gui"></div>
 
 		<div id="loading">
 			<p>Loading data for</p>
@@ -154,7 +155,7 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 		</div>
 
 		<div id="credits" class="hide">
-			<b>Rocking dendrites</b> · Code by <a href="http://twitter.com/thespite" rel="external">Jaume Sanchez Elias</a> with <a href="http://threejs.org" rel="external">three.js</a>, <a href="http://code.google.com/p/dat-gui/" rel="external" >dat.GUI</a> and <a href="https://github.com/jsantell/dancer.js" rel="external">Dancer.js</a><br/>Audio
+			<b>Rocking dendrites</b> · Code by <a href="http://twitter.com/thespite" rel="external">Jaume Sanchez Elias</a> with <a href="http://threejs.org" rel="external">three.js</a>, <a href="https://github.com/spite/guspira" rel="external">Guspira</a> and <a href="https://github.com/jsantell/dancer.js" rel="external">Dancer.js</a><br/>Audio
 <a href="http://hunz.bandcamp.com/track/its-so-light" rel="external">“It's so Light”</a> by <a href="http://hunz.bandcamp.com/" rel="external">hunz</a>.
 			<div id="social">
 				<div id="twitterButton" >
@@ -184,9 +185,6 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 		<a id="fwa" href="http://www.thefwa.com/site/rocking-dendrites" rel="external" class="hide"></a>
 
 		<script src="js/dancer.js"></script>
-		<script src="js/Detector.js"></script>
-		<script src="js/dat.gui.min.js"></script>
-		<script src="js/Three.js"></script>
 		<script src="js/tween.min.js"></script>
 		<script src="js/Stats.js"></script>
 
@@ -194,42 +192,40 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 
 			varying vec2 vUV;
 			varying float vDepth;
-			varying float vFocus;
+			varying float vBlur;
 			varying float vAlpha;
 
 			uniform float scale;
-			uniform float z;
 			uniform float rotation;
 			uniform vec2 resolution;
 			uniform int fadeZ;
+			uniform float focusDistance;
+			uniform float aperture;
+			uniform float maxCoc;
 
 			void main() {
 
-				vec4 mvPosition = modelViewMatrix * vec4( 0., 0., z, 1. );
-				vDepth = ( - mvPosition.z - 1. ) / ( 1000. - 1. );
-				float f = 0.0;
-				vAlpha = 1.0;
-				vFocus = 0.0;
-				if( vDepth < .75 ) {
-					// front
-					f = 1. - clamp( vDepth * ( 1. / .75 ), 0., 1. );
-					vFocus = f;
-					vAlpha = .6 + .3 * ( 1. - vFocus );
-				} else if( vDepth > .95 ) {
-					// back
-					f = clamp( ( vDepth - .95 ) * ( 1. / .95 ), 0., 1. );
-					vFocus = f;
-					vAlpha = .1 + .9 * ( 1. - vFocus );
-				}
+				vec4 mvPosition = modelViewMatrix * vec4( 0., 0., 0., 1. );
+				float depth = - mvPosition.z;
+				vDepth = ( depth - 1. ) / ( 1000. - 1. );
+
+				// thin-lens circle of confusion, as a fraction of the half screen height
+				float coc = min( aperture * abs( depth - focusDistance ) / max( depth, 1. ), maxCoc );
+				vBlur = maxCoc > 0. ? coc / maxCoc : 0.;
+
+				vec4 finalPosition = projectionMatrix * mvPosition;
+
+				// the core scales with distance; the CoC is screen-space, so it is multiplied by w to survive the divide
+				float core = 2.5 * scale;
+				float size = core + coc * finalPosition.w / 150.;
+				vAlpha = size > 0. ? ( core / size ) * ( core / size ) : 1.;
 				if( fadeZ == 0 ) {
 					vAlpha = 1.;
 				}
 
-				vec2 tScale = resolution.y / resolution.x * ( 2.5 * scale + .5 * f ) * vec2( 1., resolution.x / resolution.y ) ;
-				vec2 uvOffset = vec2( 0. );
-				vec2 uvScale = vec2( 1. );
+				vec2 tScale = size * vec2( resolution.y / resolution.x, 1. );
 
-				vUV = uvOffset + uv * uvScale;
+				vUV = uv;
 
 				vec2 alignedPosition = position.xy;
 
@@ -237,9 +233,6 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 				rotatedPosition.x = ( cos( rotation ) * alignedPosition.x - sin( rotation ) * alignedPosition.y ) * tScale.x;
 				rotatedPosition.y = ( sin( rotation ) * alignedPosition.x + cos( rotation ) * alignedPosition.y ) * tScale.y;
 
-				vec4 finalPosition;
-
-				finalPosition = projectionMatrix * modelViewMatrix * vec4( 0.0, 0.0, 0.0, 1.0 );
 				finalPosition.xy += rotatedPosition;
 
 				gl_Position = finalPosition;
@@ -251,29 +244,18 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 		<script id="fs-particles" type="x-shader/x-fragment">
 
 			uniform sampler2D middle;
-			//uniform sampler2D near;
-			//uniform sampler2D far;
+			uniform sampler2D blurred;
 			uniform vec3 colour;
 			uniform float opacity;
-			uniform int fadeZ;
 
 			varying vec2 vUV;
 			varying float vDepth;
-			//varying float vFocus;
+			varying float vBlur;
 			varying float vAlpha;
 
 			void main() {
 
-				/*vec4 nC = texture2D( near, vUV );
-				vec4 mC = texture2D( middle, vUV );
-				vec4 fC = texture2D( far, vUV );
-				vec4 fColour;
-				if( vDepth < .5 ) {
-					fColour = mix( mC, nC, vFocus );
-				} else {
-					fColour = mix( mC, fC, vFocus );
-				}*/
-				vec4 fColour = texture2D( middle, vUV );
+				vec4 fColour = mix( texture2D( middle, vUV ), texture2D( blurred, vUV ), vBlur );
 				fColour.rgb *= colour;
 				fColour.rgb *= .75 + .45 * vec3( 1. - vDepth );
 				fColour.a *= vAlpha * opacity;
@@ -281,12 +263,33 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 
 			}
 
-
 		</script>
 
-		<script>
+		<script type="module">
 
-			'use strict'
+			import * as THREE from './js/three.module.js';
+			import { GUI, createParams, effect } from './js/guspira.min.js';
+
+			// Colour uniforms are raw values for the custom shaders, with no sRGB conversion
+			THREE.ColorManagement.enabled = false;
+
+			var textureLoader = new THREE.TextureLoader();
+
+			function loadTexture( url ) {
+
+				return textureLoader.load( url );
+
+			}
+
+			function hasWebGL2() {
+
+				try {
+					return !!document.createElement( 'canvas' ).getContext( 'webgl2' );
+				} catch( e ) {
+					return false;
+				}
+
+			}
 
 			var container = document.getElementById( 'container' ), stats;
 
@@ -323,6 +326,34 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 
 			}
 
+			// Unclamped HSL (three r67 behaviour): HSVToHSL yields s/l outside 0..1, which the look relies on
+			function setHSL( color, h, s, l ) {
+
+				if( s === 0 ) {
+					color.r = color.g = color.b = l;
+					return color;
+				}
+
+				function hue2rgb( p, q, t ) {
+					if( t < 0 ) t += 1;
+					if( t > 1 ) t -= 1;
+					if( t < 1 / 6 ) return p + ( q - p ) * 6 * t;
+					if( t < 1 / 2 ) return q;
+					if( t < 2 / 3 ) return p + ( q - p ) * 6 * ( 2 / 3 - t );
+					return p;
+				}
+
+				var p = l <= .5 ? l * ( 1 + s ) : l + s - ( l * s );
+				var q = 2 * l - p;
+
+				color.r = hue2rgb( q, p, h + 1 / 3 );
+				color.g = hue2rgb( q, p, h );
+				color.b = hue2rgb( q, p, h - 1 / 3 );
+
+				return color;
+
+			}
+
 			function start() {
 
 				loading.style.opacity = 0;
@@ -350,6 +381,56 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 
 			}
 
+			function randomIn( range ) {
+
+				return range[ 0 ] + Math.random() * ( range[ 1 ] - range[ 0 ] );
+
+			}
+
+			var finishFiles = {
+				solid: [ 'sprite-shadow.png', 'sprite.png' ],
+				metallic: [ 'noise.png', 'noise2.png' ],
+				abstract: [ 'sprite-round-sharp.png', 'sprite-round.png' ],
+				cloudy: [ 'cloud.png', 'cloud-blur.png' ],
+				fuzzy: [ 'splatter.png', 'splatter-blur.png' ]
+			};
+			var finishCache = {}, meshFinish;
+
+			function finishTextures( finish ) {
+
+				if( !finishCache[ finish ] ) {
+					finishCache[ finish ] = {
+						normal: loadTexture( finishFiles[ finish ][ 0 ] ),
+						blur: loadTexture( finishFiles[ finish ][ 1 ] )
+					};
+				}
+				return finishCache[ finish ];
+
+			}
+
+			function finishRotation( finish ) {
+
+				return finish == 'metallic' ? 0 : Math.random() * 2 * Math.PI;
+
+			}
+
+			function applyFinish( finish ) {
+
+				if( !mesh || finish === meshFinish ) return;
+
+				var textures = finishTextures( finish );
+				// sprites keep their rotation between non-metallic finishes
+				var reroll = finish == 'metallic' || meshFinish == 'metallic';
+				for( var j = 0; j < mesh.children.length; j++ ) {
+					var u = mesh.children[ j ].material.uniforms;
+					u.middle.value = textures.normal;
+					u.blurred.value = textures.blur;
+					if( reroll ) u.rotation.value = finishRotation( finish );
+				}
+				meshFinish = finish;
+
+			}
+
 			function createDendrite( settings ) {
 
 				if( mesh ) scene.remove( mesh );
@@ -359,39 +440,17 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 				var vCount = 0;
 
 				var
-					arms = settings.arms,
-					twistiness = settings.twistiness,
-					randomness = settings.randomness,
-					minLength = settings.minLength,
-					maxLength = settings.maxLength,
+					arms = Math.round( randomIn( settings.arms ) ),
+					twistiness,
+					randomness,
 					length;
 
 				var pos = new THREE.Vector3( 0,0,0 );
 				var scale = .5;
 
-				var normalTexture, blurTexture;
-				switch( dParams.finish ) {
-					case 'solid':
-						normalTexture = THREE.ImageUtils.loadTexture( "sprite-shadow.png" );
-						blurTexture = THREE.ImageUtils.loadTexture( "sprite.png" );
-						break;
-					case 'metallic':
-						normalTexture = THREE.ImageUtils.loadTexture( "noise.png" );
-						blurTexture = THREE.ImageUtils.loadTexture( "noise2.png" );
-						break;
-					case 'abstract':
-						normalTexture = THREE.ImageUtils.loadTexture( "sprite-round-sharp.png" );
-						blurTexture = THREE.ImageUtils.loadTexture( "sprite-round.png" );
-						break;
-					case 'cloudy':
-						normalTexture = THREE.ImageUtils.loadTexture( "cloud.png" );
-						blurTexture = THREE.ImageUtils.loadTexture( "cloud-blur.png" );
-						break;
-					case 'fuzzy':
-						normalTexture = THREE.ImageUtils.loadTexture( "splatter.png" );
-						blurTexture = THREE.ImageUtils.loadTexture( "splatter-blur.png" );
-						break;
-				}
+				meshFinish = params.finish();
+				var textures = finishTextures( meshFinish );
+				var normalTexture = textures.normal, blurTexture = textures.blur;
 
 				var dir = new THREE.Vector3();
 				var ndir = new THREE.Vector3();
@@ -403,7 +462,9 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 				for( var a = 0; a < arms; a ++ ) {
 
 					indexArray[ a ] = [];
-					length = minLength + Math.random() * ( maxLength - minLength );
+					length = randomIn( settings.length );
+					twistiness = randomIn( settings.twistiness );
+					randomness = randomIn( settings.randomness );
 					scale = .5;
 
 					pos.set( 0, 0, 0 );
@@ -444,26 +505,27 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 						hs.s -= .1 * b / length;
 						hs.v += .8 * b / length;
 						var hsl = HSVToHSL( hs.h, hs.s, hs.v );
-						c.setHSL( .93, hsl.s, hsl.l );
+						setHSL( c, .93, hsl.s, hsl.l );
 
 						var material = new THREE.ShaderMaterial( {
 
 							uniforms: {
 
-								middle: { type: "t", value: normalTexture },
-								far: { type: "t", value: blurTexture },
-								near: { type: "t", value: blurTexture },
-								scale: { type: 'f', value: scale },
-								originalScale: { type: 'f', value: scale },
-								impulse: { type: 'f', value: 0 },
-								colour: { type: 'c', value: new THREE.Color( c.r, c.g, c.b ) },
-								baseColour: { type: 'v3', value: new THREE.Vector3( .93, hs.s, hs.v ) },
-								z: { type: 'f', value: pos.z },
-								rotation: { type: 'f', value: ( dParams.finish == 'metallic' )?0:Math.random() * 2 * Math.PI },
-								arm: { type: 'f', value: a },
-								opacity: { type: 'f', value: 1 },
-								resolution: { type: 'v2', value: new THREE.Vector2( window.innerWidth, window.innerHeight ) },
-								fadeZ: { type: 'i', value: 1 }
+								middle: { value: normalTexture },
+								blurred: { value: blurTexture },
+								scale: { value: scale },
+								originalScale: { value: scale },
+								impulse: { value: 0 },
+								colour: { value: new THREE.Color( c.r, c.g, c.b ) },
+								baseColour: { value: new THREE.Vector3( .93, hs.s, hs.v ) },
+								rotation: { value: finishRotation( meshFinish ) },
+								arm: { value: a },
+								opacity: { value: 1 },
+								resolution: { value: new THREE.Vector2( window.innerWidth, window.innerHeight ) },
+								fadeZ: { value: 1 },
+								focusDistance: dof.focusDistance,
+								aperture: dof.aperture,
+								maxCoc: dof.maxCoc
 
 							},
 							vertexShader: document.getElementById( 'vs-particles' ).textContent,
@@ -512,48 +574,52 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 			}
 
 
-			var dendriteParams = function() {
-				this.arms = 5;
-				this.twistiness = .2;
-				this.randomness = .25;
-				this.minLength = 60;
-				this.maxLength = 120;
-				this.animate = true;
-				this.pulsate = false;
-				this.particles = true;
-				this.finish = 'metallic';
-				this.randomize = function() {
-					dParams.arms = 1 + Math.round( Math.random() * 20 );
-					dParams.minLength = 1 + Math.round( Math.random() * 199 );
-					dParams.maxLength = dParams.minLength + Math.round( Math.random() * ( 200 - dParams.minLength ) );
-					dParams.twistiness = Math.random() * .3;
-					dParams.randomness = Math.random() * .6;
-					dParams.render();
-				};
-				this.render = function() {
-					createDendrite( {
-						arms: this.arms,
-						twistiness: this.twistiness,
-						randomness: this.randomness,
-						minLength: this.minLength,
-						maxLength: this.maxLength
-					} );
-				};
-				this.fullscreen = function() {
-					var docElm = container;
-					if (docElm.requestFullscreen) {
-							docElm.requestFullscreen();
-					}
-					else if (docElm.mozRequestFullScreen) {
-							docElm.mozRequestFullScreen();
-					}
-					else if (docElm.webkitRequestFullScreen) {
-							docElm.webkitRequestFullScreen();
-					}
-				}
+			var params = createParams( {
+				arms: [ 4, 7 ],
+				twistiness: [ .15, .25 ],
+				randomness: [ .2, .3 ],
+				length: [ 60, 120 ],
+				animate: true,
+				pulsate: false,
+				particles: true,
+				finish: 'metallic',
+				aperture: .15
+			} );
+
+			// shared by every sprite material, so one write updates them all
+			var dof = {
+				focusDistance: { value: Math.abs( distance ) },
+				aperture: { value: params.aperture() },
+				maxCoc: { value: .1 }
 			};
 
-			var dParams = new dendriteParams();
+			effect( function() { dof.aperture.value = params.aperture(); } );
+
+			function renderDendrite() {
+
+				createDendrite( {
+					arms: params.arms(),
+					twistiness: params.twistiness(),
+					randomness: params.randomness(),
+					length: params.length()
+				} );
+
+			}
+
+			function fullscreen() {
+
+				var docElm = container;
+				if (docElm.requestFullscreen) {
+						docElm.requestFullscreen();
+				}
+				else if (docElm.mozRequestFullScreen) {
+						docElm.mozRequestFullScreen();
+				}
+				else if (docElm.webkitRequestFullScreen) {
+						docElm.webkitRequestFullScreen();
+				}
+
+			}
 
 			var links = document.querySelectorAll( 'a[rel=external]' );
 			for( var j = 0; j < links.length; j++ ) {
@@ -564,7 +630,7 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 				}, false );
 			}
 
-			if( Detector.webgl ) {
+			if( hasWebGL2() ) {
 				window.addEventListener( 'load', init, false );
 			} else {
 				loading.style.display = 'none';
@@ -573,22 +639,26 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 
 			function init() {
 
-				var gui = new dat.GUI();
-				var geometry = gui.addFolder('Dendrite shape');
-				geometry.add( dParams, 'randomize');
-				geometry.add( dParams, 'arms', 1, 50 ).listen();
-				geometry.add( dParams, 'minLength', 1, 200 ).listen();
-				geometry.add( dParams, 'maxLength', 1, 200 ).listen();
-				geometry.add( dParams, 'twistiness', 0, .3 ).listen();
-				geometry.add( dParams, 'randomness', 0, .6 ).listen();
-				geometry.add( dParams, 'finish', [ 'metallic', 'solid', 'abstract', 'cloudy', 'fuzzy' ] );
-				geometry.add( dParams, 'render');
-				var actions = gui.addFolder('Actions');
-				actions.add( dParams, 'animate' );
-				actions.add( dParams, 'pulsate' );
-				actions.add( dParams, 'particles' );
-				actions.add( dParams, 'fullscreen' );
-				actions.close( true );
+				var gui = new GUI( 'Rocking dendrites', document.getElementById( 'gui' ) );
+				gui.addSection( 'Dendrite shape' );
+				gui.addRandomizeButton( 'Randomize (R)', renderDendrite );
+				var arms = gui.addRangeSlider( 'Arms', params.arms, 1, 50, 1 );
+				arms.randomize = function() {
+					var a = 1 + Math.round( Math.random() * 20 ), b = 1 + Math.round( Math.random() * 20 );
+					params.arms.set( [ Math.min( a, b ), Math.max( a, b ) ] );
+				};
+				gui.addRangeSlider( 'Length', params.length, 1, 200, 1 );
+				gui.addRangeSlider( 'Twistiness', params.twistiness, 0, .3, .001 );
+				gui.addRangeSlider( 'Randomness', params.randomness, 0, .6, .001 );
+				gui.addSelect( 'Finish', params.finish, [ 'metallic', 'solid', 'abstract', 'cloudy', 'fuzzy' ], { randomizable: false } );
+				gui.addButton( 'Render', renderDendrite );
+				gui.addSection( 'Depth of field' );
+				gui.addSlider( 'Aperture', params.aperture, 0, .5, .005, { randomizable: false } );
+				gui.addSection( 'Actions', { open: false } );
+				gui.addCheckbox( 'Animate', params.animate, { randomizable: false } );
+				gui.addCheckbox( 'Pulsate', params.pulsate, { randomizable: false } );
+				gui.addCheckbox( 'Particles', params.particles, { randomizable: false } );
+				gui.addButton( 'Fullscreen', fullscreen );
 
 				var dropzone = container;
 
@@ -630,7 +700,8 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 
 				scene = new THREE.Scene();
 
-				dParams.render();
+				renderDendrite();
+				effect( function() { applyFinish( params.finish() ); } );
 
 				renderer = new THREE.WebGLRenderer( { alpha: true } );
 				renderer.setSize( window.innerWidth, window.innerHeight );
@@ -677,9 +748,8 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 
 			function createParticles() {
 
-				var texture = THREE.ImageUtils.loadTexture( 'coc-blur.png' );
-				var blurTexture = THREE.ImageUtils.loadTexture( 'coc.png' );
-				var sharpTexture = THREE.ImageUtils.loadTexture( 'coc.png' );
+				// bokeh discs keep a hard edge when defocused, so they only grow
+				var texture = loadTexture( 'coc.png' );
 
 				var size = 2000;
 				particlesMesh = new THREE.Object3D();
@@ -690,19 +760,20 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 
 						uniforms: {
 
-							middle: { type: "t", value: sharpTexture },
-							//far: { type: "t", value: sharpTexture },
-							//near: { type: "t", value: sharpTexture },
-							scale: { type: 'f', value: 1 },
-							originalScale: { type: 'f', value: 1 },
-							impulse: { type: 'f', value: 0 },
-							colour: { type: 'v3', value: new THREE.Vector3( 255, 255, 255 ) },
-							baseColour: { type: 'v3', value: new THREE.Vector3( 0,0,0 ) },
-							z: { type: 'f', value: z },
-							rotation: { type: 'f', value: 0 },
-							opacity: { type: 'f', value: .2 + Math.random() * .2 },
-							resolution: { type: 'v2', value: new THREE.Vector2( window.innerWidth, window.innerHeight ) },
-							fadeZ: { type: 'i', value: 1 }
+							middle: { value: texture },
+							blurred: { value: texture },
+							scale: { value: 1 },
+							originalScale: { value: 1 },
+							impulse: { value: 0 },
+							colour: { value: new THREE.Vector3( 255, 255, 255 ) },
+							baseColour: { value: new THREE.Vector3( 0,0,0 ) },
+							rotation: { value: 0 },
+							opacity: { value: .2 + Math.random() * .2 },
+							resolution: { value: new THREE.Vector2( window.innerWidth, window.innerHeight ) },
+							fadeZ: { value: 1 },
+							focusDistance: dof.focusDistance,
+							aperture: dof.aperture,
+							maxCoc: dof.maxCoc
 
 						},
 						vertexShader: document.getElementById( 'vs-particles' ).textContent,
@@ -957,22 +1028,22 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 				startTime = time;
 				var delta = ellapsedTime / 16;
 
-				if( particlesMesh.parent && !dParams.particles ) {
+				if( particlesMesh.parent && !params.particles() ) {
 					scene.remove( particlesMesh );
 				}
 
-				if( !particlesMesh.parent && dParams.particles ) {
+				if( !particlesMesh.parent && params.particles() ) {
 					scene.add( particlesMesh );
 				}
 
-				if( dParams.pulsate ) {
+				if( params.pulsate() ) {
 					pulsateTime += delta;
 					for( var j = 0; j < mesh.children.length; j++ ) {
 						mesh.children[ j ].material.uniforms.scale.value = mesh.children[ j ].material.uniforms.originalScale.value + .25 * mesh.children[ j ].material.uniforms.originalScale.value * Math.sin( .1 * j + .05 * pulsateTime );
 					}
 				}
 
-				if( dParams.animate && dancer ) {
+				if( params.animate() && dancer ) {
 
 					var c = new THREE.Color();
 					var hue = .5 + .5 * Math.sin( .0001 * time );
@@ -982,7 +1053,7 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 						var u = mesh.children[ j ].material.uniforms;
 						var s = .5 * ( .5 + .5 * Math.sin( .01 * ( .1 * j + .1 * time ) ) );
 						var hsl = HSVToHSL( hue, u.baseColour.value.y - .1 * dancer.getFrequency( 0 ), u.baseColour.value.z + s + dancer.getFrequency( 0 ) )
-						mesh.children[ j ].material.uniforms.colour.value.setHSL( hsl.h, hsl.s, hsl.l );
+						setHSL( mesh.children[ j ].material.uniforms.colour.value, hsl.h, hsl.s, hsl.l );
 					}
 
 					mesh.rotation.x += delta * .1 * dancer.getFrequency( 0 );
@@ -1029,6 +1100,7 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 				if( ndistance > -500 ) ndistance = -500;
 
 				distance += ( ndistance - distance ) * .1 * delta;
+				dof.focusDistance.value = Math.abs( distance );
 
 				var s = .15 * delta;
 				lon += ( nlon - lon ) * s;
