@@ -109,6 +109,7 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 			#instructions{ position: absolute; right: 365px; top: 10px; color: white; text-shadow: 0 -1px 0 rgba( 0,0,0,.8 );font-family: arial, sans-serif; font-weight: normal; font-size: 13px; text-align: right; pointer-events: none; -webkit-transition: opacity .5s ease-out; -moz-transition: opacity .5s ease-out; transition: opacity .5s ease-out; opacity: 0; }
 			#arrow{ position: absolute; right: -40px; top: 10px; width: 67px; height: 50px; background-image: url( arrow.png ) }
 			#fwa{ position: absolute; left: 0; top: 0; width: 100px; height: 100px; background-image: url( DayTopLeft.png );}
+			body.ui-hidden #gui, body.ui-hidden #credits, body.ui-hidden #instructions, body.ui-hidden #fwa, body.ui-hidden #mobile{ display: none }
 			#gui{ position: absolute; right: 10px; top: 10px; width: 340px; z-index: 10; font-weight: normal }
 
 			.hide{
@@ -188,26 +189,153 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 		<script src="js/tween.min.js"></script>
 		<script src="js/Stats.js"></script>
 
+		<script id="sprite-common" type="x-shader/x-vertex">
+
+			attribute vec4 aCentre;	// x, y, z, scale
+			attribute vec4 aSprite;	// rotation, quad size, opacity, kind (0 dendrite, 1 bokeh)
+			attribute vec4 aColour;	// base saturation, base value, sprite index, level along its arm
+
+			uniform vec4 beatAges;	// seconds since each of the last four beats
+			uniform vec4 beatStrengths;
+			uniform float pulseAmount;
+			uniform float pulseDelay;	// seconds for a swell to move one level along an arm
+			uniform float pulseLength;
+			uniform float tanHalfFov;
+			uniform float sphereFill;	// radius of the finish texture's blob, as a fraction of the quad's half size
+
+			// each beat sends a swell from the root to the tips: fast attack, slow release
+			float beatPulse() {
+
+				float p = 0.;
+				for( int i = 0; i < 4; i ++ ) {
+					float a = ( beatAges[ i ] - aColour.w * pulseDelay ) / pulseLength;
+					if( a > 0. && a < 1. ) p += beatStrengths[ i ] * min( a * 6., 1. ) * ( 1. - a ) * ( 1. - a );
+				}
+				return p;
+
+			}
+
+			// i-th of n points spread evenly over a unit disc, turned by the given angle
+			vec2 vogel( int i, float n, float turn ) {
+
+				float t = float( i ) * 2.39996 + turn;
+				return sqrt( ( float( i ) + .5 ) / n ) * vec2( cos( t ), sin( t ) );
+
+			}
+
+			float spriteScale() {
+
+				return aCentre.w * ( 1. + pulseAmount * beatPulse() );
+
+			}
+
+			// world radius of the soft sphere a dendrite sprite stands for, matching its in-focus size on screen
+			float sphereRadius( float scale ) {
+
+				return .5 * aSprite.y * 2.5 * scale * tanHalfFov * sphereFill;
+
+			}
+
+		</script>
+
 		<script id="vs-particles" type="x-shader/x-vertex">
+
+			#include <dendrite_sprite>
 
 			varying vec2 vUV;
 			varying float vDepth;
 			varying float vBlur;
 			varying float vAlpha;
+			varying float vOpacity;
+			varying float vKind;
+			varying vec3 vColour;
+			varying vec2 vQuad;
+			varying float vCast;
+			varying vec3 vCentre;
+			varying float vRadius;
+			varying float vPenumbra;
 
-			uniform float scale;
-			uniform float rotation;
 			uniform vec2 resolution;
-			uniform int fadeZ;
 			uniform float focusDistance;
 			uniform float aperture;
 			uniform float maxCoc;
+			uniform mat4 particleModelView;
+			uniform vec3 bokehColour;
+			uniform float hue;
+			uniform float freq;
+			uniform float wavePhase;
+			uniform float waveAmount;
+			uniform sampler2D shadowDepth;
+			uniform mat4 lightMatrix;
+			uniform vec3 lightDirection;	// world, toward the light
+			uniform vec2 lightPerWorld;	// light map uv and depth per world unit
+			uniform float shadowStrength;
+			uniform float shadowSoftness;	// penumbra growth per unit of distance to the blocker
+
+			float hue2rgb( float p, float q, float t ) {
+
+				if( t < 0. ) t += 1.;
+				if( t > 1. ) t -= 1.;
+				if( t < 1. / 6. ) return p + ( q - p ) * 6. * t;
+				if( t < .5 ) return q;
+				if( t < 2. / 3. ) return p + ( q - p ) * 6. * ( 2. / 3. - t );
+				return p;
+
+			}
+
+			// HSV to HSL, then unclamped HSL to RGB: the look relies on s and l outside 0..1
+			vec3 dendriteColour() {
+
+				float wave = waveAmount * .5 * ( .5 + .5 * sin( .001 * aColour.z + wavePhase ) );
+				float v = aColour.y + wave + freq;
+				float sat = aColour.x - .1 * freq;
+				float l = ( 2. - sat ) * v;
+				float s = sat * v / ( l <= 1. ? l : 2. - l );
+				l /= 2.;
+				if( s == 0. ) return vec3( l );
+				float p = l <= .5 ? l * ( 1. + s ) : l + s - l * s;
+				float q = 2. * l - p;
+				return vec3( hue2rgb( q, p, hue + 1. / 3. ), hue2rgb( q, p, hue ), hue2rgb( q, p, hue - 1. / 3. ) );
+
+			}
+
+			// light reaching a sprite from outside its own sphere, at the point of the sphere facing the light,
+			// with percentage-closer soft shadows: find the blockers, then blur by the distance to them.
+			// Returns the light and the penumbra, in light map uv, for the per-pixel lookups
+			vec2 castLight( vec3 centre, float radius, float turn ) {
+
+				vec3 c = ( lightMatrix * vec4( centre + lightDirection * radius, 1. ) ).xyz * .5 + .5;
+				float bias = 2. * lightPerWorld.y;
+				// soft sphere: occlusion ramps in over the depth of a sphere instead of switching on
+				float ramp = max( radius * lightPerWorld.y, bias );
+				float base = radius * .25 * lightPerWorld.x;
+
+				float search = 4. * radius * lightPerWorld.x, blockers = 0., found = 0.;
+				for( int i = 0; i < 16; i ++ ) {
+					float d = textureLod( shadowDepth, c.xy + vogel( i, 16., turn ) * search, 0. ).r;
+					if( d < c.z - bias ) { blockers += d; found += 1.; }
+				}
+				if( found == 0. ) return vec2( 1., base );
+				float gap = ( c.z - blockers / found ) / lightPerWorld.y;
+				float penumbra = base + gap * shadowSoftness * lightPerWorld.x;
+
+				float shade = 0.;
+				for( int i = 0; i < 16; i ++ ) {
+					float d = textureLod( shadowDepth, c.xy + vogel( i, 16., turn + 1.3 ) * penumbra, 0. ).r;
+					shade += smoothstep( bias, bias + ramp, c.z - d );
+				}
+				return vec2( 1. - shade / 16., penumbra );
+
+			}
 
 			void main() {
 
-				vec4 mvPosition = modelViewMatrix * vec4( 0., 0., 0., 1. );
+				bool bokeh = aSprite.w > .5;
+				vec4 mvPosition = ( bokeh ? particleModelView : modelViewMatrix ) * vec4( aCentre.xyz, 1. );
 				float depth = - mvPosition.z;
 				vDepth = ( depth - 1. ) / ( 1000. - 1. );
+
+				float scale = bokeh ? aCentre.w : spriteScale();
 
 				// thin-lens circle of confusion, as a fraction of the half screen height
 				float coc = min( aperture * abs( depth - focusDistance ) / max( depth, 1. ), maxCoc );
@@ -217,23 +345,38 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 
 				// the core scales with distance; the CoC is screen-space, so it is multiplied by w to survive the divide
 				float core = 2.5 * scale;
+				// bokeh are point lights: a small dot in focus that opens into a disc as it defocuses
+				if( bokeh ) core *= mix( .12, 1., vBlur );
 				float size = core + coc * finalPosition.w / 150.;
-				vAlpha = size > 0. ? ( core / size ) * ( core / size ) : 1.;
-				if( fadeZ == 0 ) {
-					vAlpha = 1.;
-				}
+				// a bokeh disc keeps the brightness it has today when blurred, and its dot is fully opaque
+				float bright = bokeh ? 2.5 * scale : core;
+				vAlpha = size > 0. ? min( 1., ( bright / size ) * ( bright / size ) ) : 1.;
 
 				vec2 tScale = size * vec2( resolution.y / resolution.x, 1. );
 
 				vUV = uv;
+				vOpacity = aSprite.z;
+				vKind = aSprite.w;
+				vColour = bokeh ? bokehColour : dendriteColour();
 
-				vec2 alignedPosition = position.xy;
+				vec2 alignedPosition = position.xy * aSprite.y;
+				float rotation = aSprite.x;
 
 				vec2 rotatedPosition;
 				rotatedPosition.x = ( cos( rotation ) * alignedPosition.x - sin( rotation ) * alignedPosition.y ) * tScale.x;
 				rotatedPosition.y = ( sin( rotation ) * alignedPosition.x + cos( rotation ) * alignedPosition.y ) * tScale.y;
 
 				finalPosition.xy += rotatedPosition;
+
+				// where this corner sits on the sprite's sphere, in units of its radius, screen-aligned
+				vec2 unit = position.xy * 2.;
+				vec2 turned = vec2( cos( rotation ) * unit.x - sin( rotation ) * unit.y, sin( rotation ) * unit.x + cos( rotation ) * unit.y );
+				vQuad = core > 0. ? turned * size / ( core * sphereFill ) : vec2( 2. );
+				vCentre = aCentre.xyz;
+				vRadius = sphereRadius( scale );
+				vec2 lit = bokeh || shadowStrength <= 0. ? vec2( 1., 0. ) : castLight( vCentre, vRadius, 6.2832 * fract( aColour.z * .618034 ) );
+				vCast = lit.x;
+				vPenumbra = lit.y;
 
 				gl_Position = finalPosition;
 
@@ -245,33 +388,142 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 
 			uniform sampler2D middle;
 			uniform sampler2D blurred;
-			uniform vec3 colour;
-			uniform float opacity;
+			uniform sampler2D bokehMap;
+			uniform sampler2D shadowDepth;
+			uniform mat4 lightMatrix;
+			uniform vec2 lightPerWorld;
+			uniform vec3 lightDirection;
+			uniform float shadowStrength;
 
 			varying vec2 vUV;
 			varying float vDepth;
 			varying float vBlur;
 			varying float vAlpha;
+			varying float vOpacity;
+			varying float vKind;
+			varying vec3 vColour;
+			varying vec2 vQuad;
+			varying float vCast;
+			varying vec3 vCentre;
+			varying float vRadius;
+			varying float vPenumbra;
+
+			// i-th of n points spread evenly over a unit disc, turned by the given angle
+			vec2 vogel( int i, float n, float turn ) {
+
+				float t = float( i ) * 2.39996 + turn;
+				return sqrt( ( float( i ) + .5 ) / n ) * vec2( cos( t ), sin( t ) );
+
+			}
+
+			// light at this pixel's point on its sphere, against the map: the map holds the front of every sphere,
+			// so this sees both the shadows of other spheres and the far side of its own
+			float pixelLight( vec3 n ) {
+
+				vec3 c = ( lightMatrix * vec4( vCentre + vRadius * n, 1. ) ).xyz * .5 + .5;
+				float bias = 2. * lightPerWorld.y;
+				float ramp = max( vRadius * lightPerWorld.y, bias );
+				float turn = 6.2832 * fract( 52.9829189 * fract( dot( gl_FragCoord.xy, vec2( .06711056, .00583715 ) ) ) );
+				float shade = 0.;
+				for( int i = 0; i < 12; i ++ ) {
+					float d = textureLod( shadowDepth, c.xy + vogel( i, 12., turn ) * vPenumbra, 0. ).r;
+					shade += smoothstep( bias, bias + ramp, c.z - d );
+				}
+				return 1. - shade / 12.;
+
+			}
+
+			// sharp sprites look up the map per pixel; blurred ones use how much the point faces the light,
+			// softened like a soft sphere, times the shadow other spheres cast on the whole sprite
+			float lightThrough() {
+
+				float r2 = dot( vQuad, vQuad );
+				vec2 q = r2 > 1. ? vQuad * inversesqrt( r2 ) : vQuad;
+				vec3 right = vec3( viewMatrix[ 0 ][ 0 ], viewMatrix[ 1 ][ 0 ], viewMatrix[ 2 ][ 0 ] );
+				vec3 up = vec3( viewMatrix[ 0 ][ 1 ], viewMatrix[ 1 ][ 1 ], viewMatrix[ 2 ][ 1 ] );
+				vec3 back = vec3( viewMatrix[ 0 ][ 2 ], viewMatrix[ 1 ][ 2 ], viewMatrix[ 2 ][ 2 ] );
+				vec3 n = right * q.x + up * q.y + back * sqrt( max( 0., 1. - dot( q, q ) ) );
+				// the lit half stays fully lit; light fades over the back half, as through a soft sphere
+				float coarse = smoothstep( - .7, .1, dot( n, lightDirection ) ) * vCast;
+				// blurred sprites are big on screen and hide detail, so only sharp ones pay for per-pixel lookups
+				float detail = 1. - smoothstep( .3, .7, vBlur );
+				float light = detail > 0. ? mix( coarse, pixelLight( n ), detail ) : coarse;
+				return 1. - shadowStrength * ( 1. - light );
+
+			}
 
 			void main() {
 
-				vec4 fColour = mix( texture2D( middle, vUV ), texture2D( blurred, vUV ), vBlur );
-				fColour.rgb *= colour;
+				vec4 fColour = vKind > .5 ? texture2D( bokehMap, vUV ) : mix( texture2D( middle, vUV ), texture2D( blurred, vUV ), vBlur );
+				fColour.rgb *= vColour;
 				fColour.rgb *= .75 + .45 * vec3( 1. - vDepth );
-				fColour.a *= vAlpha * opacity;
+				if( vKind < .5 && shadowStrength > 0. ) fColour.rgb *= lightThrough();
+				fColour.a *= vAlpha * vOpacity;
 				gl_FragColor = vec4( fColour.rgb, fColour.a );
 
 			}
 
 		</script>
 
+		<script id="vs-shadow" type="x-shader/x-vertex">
+
+			#include <dendrite_sprite>
+
+			varying vec2 vDisc;
+			varying float vLayer;	// sphere centre depth, 0..1 across the light's range
+			varying float vThickness;	// sphere radius in the same units
+
+			// each dendrite sprite becomes a disc facing the light, as big as its sphere
+			void main() {
+
+				if( aSprite.w > .5 ) {
+					gl_Position = vec4( 0., 0., 2., 1. );
+					return;
+				}
+
+				float r = sphereRadius( spriteScale() );
+				vec4 c = projectionMatrix * modelViewMatrix * vec4( aCentre.xyz, 1. );
+				c.xy += position.xy * 2. * r * vec2( projectionMatrix[ 0 ][ 0 ], projectionMatrix[ 1 ][ 1 ] );
+				vDisc = position.xy * 2.;
+				vLayer = c.z * .5 + .5;
+				vThickness = r * .5 * abs( projectionMatrix[ 2 ][ 2 ] );
+				gl_Position = c;
+
+			}
+
+		</script>
+
+		<script id="fs-shadow" type="x-shader/x-fragment">
+
+			varying vec2 vDisc;
+			varying float vLayer;
+			varying float vThickness;
+
+			// the disc is the sphere seen from the light: write the depth of its front surface
+			void main() {
+
+				float r2 = dot( vDisc, vDisc );
+				if( r2 > 1. ) discard;
+				gl_FragDepth = vLayer - sqrt( 1. - r2 ) * vThickness;
+				gl_FragColor = vec4( 1. );
+
+			}
+
+		</script>
+
+		<script type="importmap">
+			{ "imports": { "three": "./js/three.module.js" } }
+		</script>
+
 		<script type="module">
 
-			import * as THREE from './js/three.module.js';
-			import { GUI, createParams, effect } from './js/guspira.min.js';
+			import * as THREE from 'three';
+			import { TrackballControls } from './js/TrackballControls.js';
+			import { GUI, createParams, effect, copyText, bindKey } from './js/guspira.min.js';
 
 			// Colour uniforms are raw values for the custom shaders, with no sRGB conversion
 			THREE.ColorManagement.enabled = false;
+			THREE.ShaderChunk.dendrite_sprite = document.getElementById( 'sprite-common' ).textContent;
 
 			var textureLoader = new THREE.TextureLoader();
 
@@ -303,7 +555,7 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 			var windowHalfX = window.innerWidth / 2;
 			var windowHalfY = window.innerHeight / 2;
 			var startTime = Date.now();
-			var mesh, particlesMesh, material, indexArray = [], pulsateTime = 0;
+			var mesh, particlesMesh, material, beatPending = 0;
 			var fov = 90, nfov = fov, distance = -1200, ndistance = distance, isUserInteracting, isUserPinching, onPointerDownPointerX, onPointerDownPointerY,
 			position = { x:0, y: 0 }, onPointerDownLon, onPointerDownLat, lon = 0, lat = 0, nlon = lon, nlat = lat, ellapsedFactor, phi, theta;
 
@@ -314,51 +566,50 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 
 			var dancer, audio;
 
-			function HSVToHSL( h, s, v ) {
-
-				var hh = h;
-				var ll = ( 2 - s ) * v;
-				var ss = s * v;
-				ss /= ( ll <= 1 ) ? ll : 2 - ll;
-				ll /= 2;
-
-				return { h: hh, s: ss, l: ll }
-
-			}
-
-			// Unclamped HSL (three r67 behaviour): HSVToHSL yields s/l outside 0..1, which the look relies on
-			function setHSL( color, h, s, l ) {
-
-				if( s === 0 ) {
-					color.r = color.g = color.b = l;
-					return color;
-				}
-
-				function hue2rgb( p, q, t ) {
-					if( t < 0 ) t += 1;
-					if( t > 1 ) t -= 1;
-					if( t < 1 / 6 ) return p + ( q - p ) * 6 * t;
-					if( t < 1 / 2 ) return q;
-					if( t < 2 / 3 ) return p + ( q - p ) * 6 * ( 2 / 3 - t );
-					return p;
-				}
-
-				var p = l <= .5 ? l * ( 1 + s ) : l + s - ( l * s );
-				var q = 2 * l - p;
-
-				color.r = hue2rgb( q, p, h + 1 / 3 );
-				color.g = hue2rgb( q, p, h );
-				color.b = hue2rgb( q, p, h - 1 / 3 );
-
-				return color;
-
-			}
-
 			function start() {
 
 				loading.style.opacity = 0;
 				credits.style.opacity = 1;
 				instructions.style.opacity = 1;
+				mobile.style.opacity = 0;
+				mobile.style.pointerEvents = 'none';
+
+			}
+
+			var audioURL;
+
+			function loadAudioFile( file ) {
+
+				if( !file ) return;
+				if( file.type && file.type.indexOf( 'audio/' ) !== 0 ) {
+					alert( 'That doesn\'t look like an audio file: ' + file.name );
+					return;
+				}
+
+				if( audioURL ) URL.revokeObjectURL( audioURL );
+				audioURL = URL.createObjectURL( file );
+				loadAudio( audioURL );
+				audio.addEventListener( 'error', function() {
+					alert( 'Couldn\'t play ' + file.name + '. Try an mp3, ogg or wav file.' );
+				} );
+
+			}
+
+			// highlight( on ) is called as a file is dragged over and out of el
+			function acceptAudioDrops( el, highlight ) {
+
+				el.addEventListener( 'dragover', function( event ) {
+					event.preventDefault();
+					highlight( true );
+				} );
+				el.addEventListener( 'dragleave', function( event ) {
+					if( !el.contains( event.relatedTarget ) ) highlight( false );
+				} );
+				el.addEventListener( 'drop', function( event ) {
+					event.preventDefault();
+					highlight( false );
+					loadAudioFile( event.dataTransfer.files[ 0 ] );
+				} );
 
 			}
 
@@ -376,6 +627,24 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 
 				audio.src = src || 'hunz - It\'s so Light.' + ext;
 				dancer.load( audio );
+				kickArmed = true;
+				kickPeak = 0;
+				dancer.createKick( { frequency: [ 1, 8 ], threshold: .25, decay: .02, onKick: function( mag ) {
+					// fires on every audio update while the level holds, so only re-arm once it has fallen from its peak
+					kickPeak = Math.max( kickPeak, mag );
+					var now = performance.now();
+					if( !kickArmed || now - lastKick < 180 ) return;
+					kickArmed = false;
+					lastKick = now;
+					bend.kick = Math.max( bend.kick, mag );
+					beatPending = Math.max( beatPending, mag );
+					swingPending = Math.max( swingPending, mag );
+				}, offKick: function( mag ) {
+					if( mag < .8 * kickPeak ) {
+						kickArmed = true;
+						kickPeak = mag;
+					}
+				} } ).on();
 				dancer.play();
 				start();
 
@@ -392,52 +661,143 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 				metallic: [ 'noise.png', 'noise2.png' ],
 				abstract: [ 'sprite-round-sharp.png', 'sprite-round.png' ],
 				cloudy: [ 'cloud.png', 'cloud-blur.png' ],
-				fuzzy: [ 'splatter.png', 'splatter-blur.png' ]
+				fuzzy: [ 'splatter.png', 'splatter-blur.png' ],
+				glossy: [ 'glossy.png', 'glossy-blur.png' ],
+				bubble: [ 'bubble.png', 'bubble-blur.png' ],
+				cell: [ 'cell.png', 'cell-blur.png' ],
+				ink: [ 'ink.png', 'ink-blur.png' ],
+				velvet: [ 'velvet.png', 'velvet-blur.png' ]
 			};
 			var finishCache = {}, meshFinish;
 
 			function finishTextures( finish ) {
 
 				if( !finishCache[ finish ] ) {
-					finishCache[ finish ] = {
-						normal: loadTexture( finishFiles[ finish ][ 0 ] ),
-						blur: loadTexture( finishFiles[ finish ][ 1 ] )
-					};
+					var entry = finishCache[ finish ] = { fill: .8 };
+					entry.normal = textureLoader.load( finishFiles[ finish ][ 0 ], function( texture ) {
+						entry.fill = blobRadius( texture.image );
+						if( material && meshFinish == finish ) material.uniforms.sphereFill.value = entry.fill;
+					} );
+					entry.blur = loadTexture( finishFiles[ finish ][ 1 ] );
 				}
 				return finishCache[ finish ];
 
 			}
 
+			// radius of a disc with the same total alpha as the image, as a fraction of its half size
+			function blobRadius( image ) {
+
+				var canvas = document.createElement( 'canvas' );
+				canvas.width = canvas.height = 64;
+				var context = canvas.getContext( '2d', { willReadFrequently: true } );
+				context.drawImage( image, 0, 0, 64, 64 );
+				var data = context.getImageData( 0, 0, 64, 64 ).data, sum = 0;
+				for( var i = 3; i < data.length; i += 4 ) sum += data[ i ] / 255;
+				return Math.min( 1, Math.max( .1, Math.sqrt( 4 * ( sum / 4096 ) / Math.PI ) ) );
+
+			}
+
+			function useFinish( finish ) {
+
+				var textures = finishTextures( finish );
+				material.uniforms.middle.value = textures.normal;
+				material.uniforms.blurred.value = textures.blur;
+				material.uniforms.sphereFill.value = textures.fill;
+
+			}
+
+			// textures with lighting baked in must not spin, or their highlights point every way
+			var UPRIGHT_FINISHES = { metallic: true, glossy: true, bubble: true };
+
 			function finishRotation( finish ) {
 
-				return finish == 'metallic' ? 0 : Math.random() * 2 * Math.PI;
+				return UPRIGHT_FINISHES[ finish ] ? 0 : Math.random() * 2 * Math.PI;
+
+			}
+
+			// every sprite is one instance: particles in slots 0..PARTICLES-1, dendrite after them
+			var PARTICLES = 100, MAX_SPRITES = PARTICLES + 50 * 200, STRIDE = 12;
+			var spriteData = new Float32Array( MAX_SPRITES * STRIDE ), sortedData = new Float32Array( MAX_SPRITES * STRIDE );
+			var sortKeys = new Uint32Array( MAX_SPRITES );
+			var spriteBuffer, dendriteCount = 0, dendriteView = new THREE.Matrix4();
+
+			function createSprites() {
+
+				var quad = new THREE.PlaneGeometry( 1, 1 );
+				var geometry = new THREE.InstancedBufferGeometry();
+				geometry.setIndex( quad.index );
+				geometry.setAttribute( 'position', quad.attributes.position );
+				geometry.setAttribute( 'uv', quad.attributes.uv );
+
+				spriteBuffer = new THREE.InstancedInterleavedBuffer( sortedData, STRIDE, 1 ).setUsage( THREE.DynamicDrawUsage );
+				geometry.setAttribute( 'aCentre', new THREE.InterleavedBufferAttribute( spriteBuffer, 4, 0 ) );
+				geometry.setAttribute( 'aSprite', new THREE.InterleavedBufferAttribute( spriteBuffer, 4, 4 ) );
+				geometry.setAttribute( 'aColour', new THREE.InterleavedBufferAttribute( spriteBuffer, 4, 8 ) );
+				geometry.instanceCount = 0;
+
+				var textures = finishTextures( params.finish() );
+
+				material = new THREE.ShaderMaterial( {
+
+					uniforms: {
+
+						middle: { value: textures.normal },
+						blurred: { value: textures.blur },
+						bokehMap: { value: loadTexture( 'coc.png' ) },
+						resolution: { value: new THREE.Vector2( window.innerWidth, window.innerHeight ) },
+						focusDistance: dof.focusDistance,
+						aperture: dof.aperture,
+						maxCoc: dof.maxCoc,
+						particleModelView: { value: new THREE.Matrix4() },
+						bokehColour: { value: new THREE.Vector3( 255, 255, 255 ) },
+						hue: { value: .93 },
+						freq: { value: 0 },
+						wavePhase: { value: 0 },
+						waveAmount: { value: 0 },
+						beatAges: { value: new THREE.Vector4( 1e3, 1e3, 1e3, 1e3 ) },
+						beatStrengths: { value: new THREE.Vector4() },
+						pulseAmount: { value: params.pulse() },
+						pulseDelay: { value: 0 },
+						pulseLength: { value: .45 },
+						tanHalfFov: { value: Math.tan( THREE.MathUtils.degToRad( camera.fov / 2 ) ) },
+						sphereFill: { value: textures.fill },
+						shadowDepth: { value: null },
+						lightMatrix: { value: new THREE.Matrix4() },
+						lightPerWorld: { value: new THREE.Vector2() },
+						lightDirection: { value: new THREE.Vector3() },
+						shadowStrength: { value: 0 },
+						shadowSoftness: { value: params.shadowSoftness() }
+
+					},
+					vertexShader: document.getElementById( 'vs-particles' ).textContent,
+					fragmentShader: document.getElementById( 'fs-particles' ).textContent,
+					transparent: true
+
+				} );
+
+				mesh = new THREE.Mesh( geometry, material );
+				// bounds would come from the unit quad, not the instances
+				mesh.frustumCulled = false;
+				scene.add( mesh );
 
 			}
 
 			function applyFinish( finish ) {
 
-				if( !mesh || finish === meshFinish ) return;
+				if( !material || finish === meshFinish ) return;
 
-				var textures = finishTextures( finish );
+				useFinish( finish );
 				// sprites keep their rotation between non-metallic finishes
-				var reroll = finish == 'metallic' || meshFinish == 'metallic';
-				for( var j = 0; j < mesh.children.length; j++ ) {
-					var u = mesh.children[ j ].material.uniforms;
-					u.middle.value = textures.normal;
-					u.blurred.value = textures.blur;
-					if( reroll ) u.rotation.value = finishRotation( finish );
+				if( UPRIGHT_FINISHES[ finish ] || UPRIGHT_FINISHES[ meshFinish ] ) {
+					for( var i = 0; i < dendriteCount; i++ ) {
+						spriteData[ ( PARTICLES + i ) * STRIDE + 4 ] = finishRotation( finish );
+					}
 				}
 				meshFinish = finish;
 
 			}
 
 			function createDendrite( settings ) {
-
-				if( mesh ) scene.remove( mesh );
-
-				mesh = new THREE.Object3D();
-				indexArray = [];
-				var vCount = 0;
 
 				var
 					arms = Math.round( randomIn( settings.arms ) ),
@@ -449,19 +809,22 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 				var scale = .5;
 
 				meshFinish = params.finish();
-				var textures = finishTextures( meshFinish );
-				var normalTexture = textures.normal, blurTexture = textures.blur;
+				useFinish( meshFinish );
 
 				var dir = new THREE.Vector3();
 				var ndir = new THREE.Vector3();
 				var diff = new THREE.Vector3();
 				var offset = new THREE.Vector3();
 				var udir = new THREE.Vector3();
-				var c = new THREE.Color();
+
+				var rest = [], count = 0;
+				armStart = [];
+				armCount = [];
+				maxLevel = 0;
 
 				for( var a = 0; a < arms; a ++ ) {
 
-					indexArray[ a ] = [];
+					armStart[ a ] = count;
 					length = randomIn( settings.length );
 					twistiness = randomIn( settings.twistiness );
 					randomness = randomIn( settings.randomness );
@@ -500,90 +863,444 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 						udir.normalize();
 						udir.multiplyScalar( scale * 50 );
 						pos.add( udir );
+						rest.push( udir.x, udir.y, udir.z );
 
 						var hs = { s: .9 + .7 * scale, v: .5 + 2 * scale - .5 * ( 1 - 2 * ( b / length ) ) };
 						hs.s -= .1 * b / length;
 						hs.v += .8 * b / length;
-						var hsl = HSVToHSL( hs.h, hs.s, hs.v );
-						setHSL( c, .93, hsl.s, hsl.l );
 
-						var material = new THREE.ShaderMaterial( {
-
-							uniforms: {
-
-								middle: { value: normalTexture },
-								blurred: { value: blurTexture },
-								scale: { value: scale },
-								originalScale: { value: scale },
-								impulse: { value: 0 },
-								colour: { value: new THREE.Color( c.r, c.g, c.b ) },
-								baseColour: { value: new THREE.Vector3( .93, hs.s, hs.v ) },
-								rotation: { value: finishRotation( meshFinish ) },
-								arm: { value: a },
-								opacity: { value: 1 },
-								resolution: { value: new THREE.Vector2( window.innerWidth, window.innerHeight ) },
-								fadeZ: { value: 1 },
-								focusDistance: dof.focusDistance,
-								aperture: dof.aperture,
-								maxCoc: dof.maxCoc
-
-							},
-							vertexShader: document.getElementById( 'vs-particles' ).textContent,
-							fragmentShader: document.getElementById( 'fs-particles' ).textContent,
-							transparent: true
-
-						} );
-
-						var plane = new THREE.Mesh( new THREE.PlaneGeometry( 300, 300 ), material );
-						plane.position.set( pos.x, pos.y, pos.z );
-						mesh.add( plane );
-
-						indexArray[ a ].push( vCount );
-						vCount++;
+						var o = ( PARTICLES + count ) * STRIDE;
+						spriteData[ o ] = pos.x;
+						spriteData[ o + 1 ] = pos.y;
+						spriteData[ o + 2 ] = pos.z;
+						spriteData[ o + 3 ] = scale;
+						spriteData[ o + 4 ] = finishRotation( meshFinish );
+						spriteData[ o + 5 ] = 300;
+						spriteData[ o + 6 ] = 1;
+						spriteData[ o + 7 ] = 0;
+						spriteData[ o + 8 ] = hs.s;
+						spriteData[ o + 9 ] = hs.v;
+						spriteData[ o + 10 ] = count;
+						spriteData[ o + 11 ] = b;
+						count++;
 
 					}
 
+					armCount[ a ] = count - armStart[ a ];
+					maxLevel = Math.max( maxLevel, armCount[ a ] );
+
 				}
 
-				scene.add( mesh );
+				dendriteCount = count;
+				restOffsets = new Float32Array( rest );
 
-				var occlusion = [];
-				for( var j = 0; j < mesh.children.length; j++ ) {
-					occlusion[ j ] = { v: 0, c: 0 };
-					for( var i = 0; i < mesh.children.length; i++ ) {
-						if( i != j ) {
-							/*var p = new THREE.Vector3();
-							p.copy( mesh.children[ j ].position );
-							p.sub( p, mesh.children[ i ].position );
-							var d = p.lengthSq();
-							if( d < 100000 ) {
-								occlusion[ j ].c++;
-								occlusion[ j ].v += 1 - d / 100000;
-							}*/
-						}
+				// a fresh dendrite starts uncoloured by the audio and straight
+				var u = material.uniforms;
+				u.hue.value = .93;
+				u.freq.value = 0;
+				u.waveAmount.value = 0;
+				resetBend();
+
+			}
+
+			// view depth of every visible sprite, sorted back to front, as three does per object
+			function sortSprites() {
+
+				camera.updateMatrixWorld();
+				mesh.updateMatrixWorld();
+				particlesMesh.updateMatrixWorld();
+				dendriteView.multiplyMatrices( camera.matrixWorldInverse, mesh.matrixWorld );
+				var particleView = material.uniforms.particleModelView.value;
+				particleView.multiplyMatrices( camera.matrixWorldInverse, particlesMesh.matrixWorld );
+
+				var n = 0, first = params.particles() ? 0 : PARTICLES, last = PARTICLES + dendriteCount;
+				for( var i = first; i < last; i++ ) {
+					var o = i * STRIDE, e = i < PARTICLES ? particleView.elements : dendriteView.elements;
+					var depth = - ( e[ 2 ] * spriteData[ o ] + e[ 6 ] * spriteData[ o + 1 ] + e[ 10 ] * spriteData[ o + 2 ] + e[ 14 ] );
+					// 18 bits of depth over 0..5000, far first, with the slot in the low 14 bits
+					var q = Math.min( 262143, Math.max( 0, Math.round( depth * 52.4 ) ) );
+					sortKeys[ n++ ] = ( 262143 - q ) * 16384 + i;
+				}
+
+				var keys = sortKeys.subarray( 0, n ).sort();
+				for( var j = 0; j < n; j++ ) {
+					var from = ( keys[ j ] & 16383 ) * STRIDE, to = j * STRIDE;
+					for( var c = 0; c < STRIDE; c++ ) sortedData[ to + c ] = spriteData[ from + c ];
+				}
+
+				mesh.geometry.instanceCount = n;
+				spriteBuffer.clearUpdateRanges();
+				spriteBuffer.addUpdateRange( 0, n * STRIDE );
+				spriteBuffer.needsUpdate = true;
+
+			}
+
+			// Soft shadows: every dendrite sprite is a sphere. The light's depth map holds the front of each sphere;
+			// each sprite looks up the shadow cast on it once, and pixels add the shading of their own sphere
+			var SHADOW_SIZE = 1024;
+			var shadowTarget, shadowScene, shadowCamera, shadowMaterial;
+			// top left and a little in front, in camera space, so it stays top left wherever the camera goes
+			var lightInView = new THREE.Vector3( - 1, 1, .6 ).normalize();
+			var lightUp = new THREE.Vector3();
+
+			function createShadows() {
+
+				shadowTarget = new THREE.WebGLRenderTarget( SHADOW_SIZE, SHADOW_SIZE, { depthTexture: new THREE.DepthTexture( SHADOW_SIZE, SHADOW_SIZE, THREE.FloatType ) } );
+				shadowCamera = new THREE.OrthographicCamera();
+
+				var u = material.uniforms;
+				shadowMaterial = new THREE.ShaderMaterial( {
+
+					uniforms: {
+
+						beatAges: u.beatAges,
+						beatStrengths: u.beatStrengths,
+						pulseAmount: u.pulseAmount,
+						pulseDelay: u.pulseDelay,
+						pulseLength: u.pulseLength,
+						tanHalfFov: u.tanHalfFov,
+						sphereFill: u.sphereFill
+
+					},
+					vertexShader: document.getElementById( 'vs-shadow' ).textContent,
+					fragmentShader: document.getElementById( 'fs-shadow' ).textContent
+
+				} );
+
+				var shadowMesh = new THREE.Mesh( mesh.geometry, shadowMaterial );
+				shadowMesh.frustumCulled = false;
+				shadowScene = new THREE.Scene();
+				shadowScene.add( shadowMesh );
+
+				u.shadowDepth.value = shadowTarget.depthTexture;
+
+			}
+
+			// fits an orthographic light camera around the dendrite, along the light, then draws the layers
+			function renderShadows() {
+
+				var u = material.uniforms, L = u.lightDirection.value;
+				L.copy( lightInView ).applyQuaternion( camera.quaternion );
+				lightUp.set( 0, 1, 0 ).applyQuaternion( camera.quaternion );
+
+				var nearest = - Infinity, farthest = Infinity, extent = 0, radius = 0;
+				for( var i = PARTICLES; i < PARTICLES + dendriteCount; i++ ) {
+					var o = i * STRIDE, x = spriteData[ o ], y = spriteData[ o + 1 ], z = spriteData[ o + 2 ];
+					var d = x * L.x + y * L.y + z * L.z;
+					nearest = Math.max( nearest, d );
+					farthest = Math.min( farthest, d );
+					extent = Math.max( extent, x * x + y * y + z * z - d * d );
+					radius = Math.max( radius, spriteData[ o + 3 ] );
+				}
+				if( !dendriteCount ) return;
+				// a sprite's sphere at the largest beat swell, with room to spare
+				radius = 300 * radius * u.tanHalfFov.value * u.sphereFill.value * ( 1 + 1.5 * params.pulse() ) + 1;
+				extent = Math.sqrt( extent ) + radius;
+
+				var distance = nearest + radius + 1;
+				shadowCamera.left = shadowCamera.bottom = - extent;
+				shadowCamera.right = shadowCamera.top = extent;
+				shadowCamera.near = .5;
+				shadowCamera.far = distance - farthest + radius;
+				shadowCamera.position.copy( L ).multiplyScalar( distance );
+				shadowCamera.up.copy( lightUp );
+				shadowCamera.lookAt( 0, 0, 0 );
+				shadowCamera.updateProjectionMatrix();
+				shadowCamera.updateMatrixWorld();
+				u.lightMatrix.value.multiplyMatrices( shadowCamera.projectionMatrix, shadowCamera.matrixWorldInverse );
+				u.lightPerWorld.value.set( .5 / extent, 1 / ( shadowCamera.far - shadowCamera.near ) );
+
+				renderer.setRenderTarget( shadowTarget );
+				renderer.render( shadowScene, shadowCamera );
+				renderer.setRenderTarget( null );
+
+			}
+
+			// Inertia: a chain of rotational springs from root to tip. Node 0 follows the audio spin,
+			// the rest lag behind it, and each sprite's centre is rebuilt from its rest offsets
+			var BEND_NODES = 12, BEND_TAPER = .5, SPIN_INERTIA = .25;
+			var bend = { q: new Float64Array( BEND_NODES * 4 ), w: new Float64Array( BEND_NODES * 3 ), tau: new Float64Array( BEND_NODES * 3 ), kick: 0 };
+			var restOffsets = new Float32Array( 0 ), armStart = [], armCount = [], maxLevel = 0, lastKick = 0, kickArmed = true, kickPeak = 0;
+			var levelMat = new Float32Array( 200 * 9 ), rv = [ 0, 0, 0 ];
+			var spinV = new THREE.Vector3(), rootQ = new THREE.Quaternion(), kickAxis = new THREE.Vector3(), kickTmp = new THREE.Vector3();
+
+			// swing: a hard enough beat reverses the spin, tilted a little so the swings vary
+			var spinDirection = 1, spinTilt = new THREE.Quaternion(), swingAxis = new THREE.Vector3(), swingPending = 0, lastSwing = 0;
+			var spinSmooth = new THREE.Vector3(), rootInv = new THREE.Quaternion();
+
+			function updateSwing() {
+
+				if( !swingPending ) return;
+				var now = performance.now();
+				if( params.swing() && params.animate() && swingPending >= params.swingThreshold() && now - lastSwing > Math.max( 500, 1500 * params.steadiness() ) ) {
+					spinDirection = - spinDirection;
+					swingAxis.set( .5 - Math.random(), .5 - Math.random(), .5 - Math.random() ).normalize();
+					spinTilt.setFromAxisAngle( swingAxis, ( Math.random() - .5 ) * 1.4 );
+					lastSwing = now;
+				}
+				swingPending = 0;
+
+			}
+
+			// drag to rotate: TrackballControls moves a proxy camera freely on every axis, and the dendrite turns the opposite way
+			var DRAG_FOLLOW = .06, dragCamera, dragControls;
+			var dragStartInv = new THREE.Quaternion(), dragRootStart = new THREE.Quaternion(), dragTarget = new THREE.Quaternion(), dragDelta = new THREE.Quaternion();
+			var dragLocal = new THREE.Quaternion(), dragView = new THREE.Quaternion();
+
+			// the dendrite follows the drag while it is held and while its momentum coasts on, then the music takes over
+			var DRAG_COAST = 1200, dragHeld = false, dragReleased = - Infinity, dragFollowing = false;
+
+			function setDragRotate( on ) {
+
+				dragControls.enabled = on;
+				dragHeld = false;
+				dragReleased = - Infinity;
+
+			}
+
+			// pick the dendrite up from wherever it is now
+			function grabDendrite() {
+
+				dragHeld = true;
+				if( dragFollowing ) return;
+				dragStartInv.copy( dragCamera.quaternion ).invert();
+				dragRootStart.set( bend.q[ 0 ], bend.q[ 1 ], bend.q[ 2 ], bend.q[ 3 ] );
+
+			}
+
+			function releaseDendrite() {
+
+				dragHeld = false;
+				dragReleased = performance.now();
+
+			}
+			bend.q[ 3 ] = 1;
+
+			// rotation vector taking node j onto node i: log( q_i * conj( q_j ) ), shortest path
+			function relRotVec( q, i, j, out ) {
+
+				var ax = q[ i * 4 ], ay = q[ i * 4 + 1 ], az = q[ i * 4 + 2 ], aw = q[ i * 4 + 3 ];
+				var bx = - q[ j * 4 ], by = - q[ j * 4 + 1 ], bz = - q[ j * 4 + 2 ], bw = q[ j * 4 + 3 ];
+				var x = aw * bx + ax * bw + ay * bz - az * by;
+				var y = aw * by - ax * bz + ay * bw + az * bx;
+				var z = aw * bz + ax * by - ay * bx + az * bw;
+				var w = aw * bw - ax * bx - ay * by - az * bz;
+				if( w < 0 ) { x = - x; y = - y; z = - z; w = - w; }
+				var s = Math.sqrt( x * x + y * y + z * z );
+				var f = s > 1e-9 ? 2 * Math.atan2( s, w ) / s : 2;
+				out[ 0 ] = x * f; out[ 1 ] = y * f; out[ 2 ] = z * f;
+
+			}
+
+			// q_i = exp( w_i * dt ) * q_i
+			function integrateNode( i, dt ) {
+
+				var q = bend.q, w = bend.w;
+				var wx = w[ i * 3 ], wy = w[ i * 3 + 1 ], wz = w[ i * 3 + 2 ];
+				var l = Math.sqrt( wx * wx + wy * wy + wz * wz );
+				if( l < 1e-9 ) return;
+				var s = Math.sin( .5 * l * dt ) / l, dw = Math.cos( .5 * l * dt );
+				var dx = wx * s, dy = wy * s, dz = wz * s, o = i * 4;
+				var x = q[ o ], y = q[ o + 1 ], z = q[ o + 2 ], qw = q[ o + 3 ];
+				var nx = dw * x + dx * qw + dy * z - dz * y;
+				var ny = dw * y - dx * z + dy * qw + dz * x;
+				var nz = dw * z + dx * y - dy * x + dz * qw;
+				var nw = dw * qw - dx * x - dy * y - dz * z;
+				var n = 1 / Math.sqrt( nx * nx + ny * ny + nz * nz + nw * nw );
+				q[ o ] = nx * n; q[ o + 1 ] = ny * n; q[ o + 2 ] = nz * n; q[ o + 3 ] = nw * n;
+
+			}
+
+			// the root's angular velocity eases toward the audio spin, expressed in its own frame
+			function driveRoot( dt ) {
+
+				var w = bend.w;
+				if( params.dragRotate() && ( dragHeld || performance.now() - dragReleased < DRAG_COAST ) ) {
+					dragFollowing = true;
+					// the root chases the orientation set by dragging; the chain does the rest
+					// undo the proxy's turn in its own frame, seen from the real camera so the axes match the screen
+					dragLocal.copy( dragStartInv ).multiply( dragCamera.quaternion ).invert();
+					dragView.copy( camera.quaternion ).invert();
+					dragTarget.copy( camera.quaternion ).multiply( dragLocal ).multiply( dragView ).multiply( dragRootStart );
+					rootQ.set( bend.q[ 0 ], bend.q[ 1 ], bend.q[ 2 ], bend.q[ 3 ] );
+					dragDelta.copy( rootQ ).invert().premultiply( dragTarget );
+					if( dragDelta.w < 0 ) dragDelta.set( - dragDelta.x, - dragDelta.y, - dragDelta.z, - dragDelta.w );
+					var len = Math.sqrt( dragDelta.x * dragDelta.x + dragDelta.y * dragDelta.y + dragDelta.z * dragDelta.z );
+					var f = ( len > 1e-9 ? 2 * Math.atan2( len, dragDelta.w ) / len : 2 ) / DRAG_FOLLOW;
+					w[ 0 ] = dragDelta.x * f; w[ 1 ] = dragDelta.y * f; w[ 2 ] = dragDelta.z * f;
+					bend.kick = 0;
+					return;
+				}
+
+				if( dragFollowing ) {
+					// hand back to the music from the current motion, so it doesn't snap
+					rootQ.set( bend.q[ 0 ], bend.q[ 1 ], bend.q[ 2 ], bend.q[ 3 ] );
+					spinSmooth.set( w[ 0 ], w[ 1 ], w[ 2 ] ).applyQuaternion( rootInv.copy( rootQ ).invert() );
+					dragFollowing = false;
+				}
+
+				if( params.animate() && dancer ) {
+					// the audio spin, in the root's own frame
+					spinV.set( 6.25 * dancer.getFrequency( 0 ), 6.25 * dancer.getFrequency( 1 ), 6.25 * dancer.getFrequency( 2 ) );
+					spinV.applyQuaternion( spinTilt ).multiplyScalar( spinDirection );
+				} else {
+					spinV.set( 0, 0, 0 );
+				}
+				rootQ.set( bend.q[ 0 ], bend.q[ 1 ], bend.q[ 2 ], bend.q[ 3 ] );
+				var steadiness = Math.max( .02, params.steadiness() );
+
+				if( bend.kick > 0 && params.animate() ) {
+					// lurch the root sideways to the spin; the lurch travels down the arms
+					kickTmp.set( .5 - Math.random(), .5 - Math.random(), .5 - Math.random() );
+					kickAxis.set( w[ 0 ], w[ 1 ], w[ 2 ] ).cross( kickTmp );
+					if( kickAxis.lengthSq() < 1e-6 ) kickAxis.copy( kickTmp );
+					kickAxis.normalize().multiplyScalar( Math.min( params.kick() * bend.kick, 8 ) );
+					// spread over the steadiness time: the same total turn, without the jolt
+					kickAxis.multiplyScalar( Math.min( 1, SPIN_INERTIA / steadiness ) ).applyQuaternion( rootInv.copy( rootQ ).invert() );
+					spinSmooth.add( kickAxis );
+				}
+				bend.kick = 0;
+
+				// average the target over the steadiness time, so the spin can't change direction abruptly
+				spinSmooth.lerp( spinV, 1 - Math.exp( - dt / steadiness ) );
+				spinV.copy( spinSmooth ).applyQuaternion( rootQ );
+				var e = 1 - Math.exp( - dt / SPIN_INERTIA );
+				w[ 0 ] += ( spinV.x - w[ 0 ] ) * e;
+				w[ 1 ] += ( spinV.y - w[ 1 ] ) * e;
+				w[ 2 ] += ( spinV.z - w[ 2 ] ) * e;
+
+			}
+
+			function stepBend( dt, k, drag ) {
+
+				var N = BEND_NODES, q = bend.q, w = bend.w, t = bend.tau;
+				driveRoot( dt );
+
+				if( !params.bend() ) {
+					integrateNode( 0, dt );
+					for( var i = 1; i < N; i ++ ) {
+						for( var c = 0; c < 4; c ++ ) q[ i * 4 + c ] = q[ c ];
+						for( var c = 0; c < 3; c ++ ) w[ i * 3 + c ] = w[ c ];
+					}
+					return;
+				}
+
+				t.fill( 0 );
+				for( var i = 1; i < N; i ++ ) {
+					var ki = k * ( 1 - BEND_TAPER * ( i - 1 ) / ( N - 1 ) ), ci = 2 * params.bendDamping() * Math.sqrt( ki );
+					relRotVec( q, i - 1, i, rv );
+					for( var c = 0; c < 3; c ++ ) {
+						var f = ki * rv[ c ] + ci * ( w[ ( i - 1 ) * 3 + c ] - w[ i * 3 + c ] );
+						t[ i * 3 + c ] += f;
+						t[ ( i - 1 ) * 3 + c ] -= f;
 					}
 				}
+				for( var i = 1; i < N; i ++ ) {
+					for( var c = 0; c < 3; c ++ ) w[ i * 3 + c ] += ( t[ i * 3 + c ] - drag * w[ i * 3 + c ] ) * dt;
+				}
+				for( var i = 0; i < N; i ++ ) integrateNode( i, dt );
 
-				for( var j = 0; j < mesh.children.length; j++ ) {
-					if( occlusion[ j ].c > 0 ) {
-						mesh.children[ j ].material.uniforms.baseColour.value.y -= .1 * occlusion[ j ].v / occlusion[ j ].c
-						mesh.children[ j ].material.uniforms.baseColour.value.z -= .75 * occlusion[ j ].v / occlusion[ j ].c;
+			}
+
+			// splits the frame into substeps short enough for the stiffest chain mode to stay stable
+			function updateBend( dt ) {
+
+				var N = BEND_NODES;
+				var k = Math.pow( ( N - 1 ) / Math.max( .15, params.bendLag() ), 2 );
+				var drag = 2 * params.bendDrag() * k / ( N * N );
+				var w2 = 4 * k, g = 8 * params.bendDamping() * Math.sqrt( k ) + drag;
+				var h = .8 * ( - g + Math.sqrt( g * g + 4 * w2 ) ) / w2;
+				var steps = Math.min( 200, Math.ceil( dt / h ) );
+				for( var i = 0; i < steps; i ++ ) stepBend( dt / steps, k, drag );
+
+				buildLevels();
+				updateCentres();
+
+			}
+
+			function resetBend() {
+
+				for( var c = 0; c < 4; c ++ ) bend.q[ c ] = c == 3 ? 1 : 0;
+				bend.w.fill( 0 );
+				for( var i = 1; i < BEND_NODES; i ++ ) {
+					for( var c = 0; c < 4; c ++ ) bend.q[ i * 4 + c ] = bend.q[ c ];
+				}
+
+			}
+
+			// one rotation matrix per level along the arms, interpolated from the chain by absolute depth
+			function buildLevels() {
+
+				var q = bend.q, N = BEND_NODES;
+				for( var b = 0; b < maxLevel; b ++ ) {
+					var t = b / Math.max( 1, maxLevel - 1 ) * ( N - 1 );
+					var i = Math.min( Math.floor( t ), N - 2 ), f = t - i, o = i * 4;
+					var sgn = ( q[ o ] * q[ o + 4 ] + q[ o + 1 ] * q[ o + 5 ] + q[ o + 2 ] * q[ o + 6 ] + q[ o + 3 ] * q[ o + 7 ] ) < 0 ? - 1 : 1;
+					var x = q[ o ] + ( sgn * q[ o + 4 ] - q[ o ] ) * f, y = q[ o + 1 ] + ( sgn * q[ o + 5 ] - q[ o + 1 ] ) * f;
+					var z = q[ o + 2 ] + ( sgn * q[ o + 6 ] - q[ o + 2 ] ) * f, w = q[ o + 3 ] + ( sgn * q[ o + 7 ] - q[ o + 3 ] ) * f;
+					var n = 1 / Math.sqrt( x * x + y * y + z * z + w * w ); x *= n; y *= n; z *= n; w *= n;
+					var m = b * 9;
+					levelMat[ m ] = 1 - 2 * ( y * y + z * z ); levelMat[ m + 1 ] = 2 * ( x * y + w * z ); levelMat[ m + 2 ] = 2 * ( x * z - w * y );
+					levelMat[ m + 3 ] = 2 * ( x * y - w * z ); levelMat[ m + 4 ] = 1 - 2 * ( x * x + z * z ); levelMat[ m + 5 ] = 2 * ( y * z + w * x );
+					levelMat[ m + 6 ] = 2 * ( x * z + w * y ); levelMat[ m + 7 ] = 2 * ( y * z - w * x ); levelMat[ m + 8 ] = 1 - 2 * ( x * x + y * y );
+				}
+
+			}
+
+			// centres are the running sum of rotated rest offsets, so segment lengths never change
+			function updateCentres() {
+
+				for( var a = 0; a < armStart.length; a ++ ) {
+					var x = 0, y = 0, z = 0, i = armStart[ a ], e = i + armCount[ a ];
+					for( var b = 0; i < e; i ++, b ++ ) {
+						var m = b * 9, r = i * 3, dx = restOffsets[ r ], dy = restOffsets[ r + 1 ], dz = restOffsets[ r + 2 ];
+						x += levelMat[ m ] * dx + levelMat[ m + 3 ] * dy + levelMat[ m + 6 ] * dz;
+						y += levelMat[ m + 1 ] * dx + levelMat[ m + 4 ] * dy + levelMat[ m + 7 ] * dz;
+						z += levelMat[ m + 2 ] * dx + levelMat[ m + 5 ] * dy + levelMat[ m + 8 ] * dz;
+						var o = ( PARTICLES + i ) * STRIDE;
+						spriteData[ o ] = x; spriteData[ o + 1 ] = y; spriteData[ o + 2 ] = z;
 					}
 				}
 
 			}
 
-
 			var params = createParams( {
-				arms: [ 4, 7 ],
-				twistiness: [ .15, .25 ],
-				randomness: [ .2, .3 ],
-				length: [ 60, 120 ],
+				arms: [ 39, 50 ],
+				twistiness: [ .098, .265 ],
+				randomness: [ .205, .346 ],
+				length: [ 96, 156 ],
 				animate: true,
 				pulsate: false,
-				particles: true,
-				finish: 'metallic',
-				aperture: .15
+				particles: false,
+				finish: 'cloudy',
+				aperture: .08,
+				bend: true,
+				bendLag: 1.34,
+				bendDamping: .59,
+				bendDrag: .3,
+				kick: 4,
+				swing: true,
+				swingThreshold: .85,
+				steadiness: .8,
+				pulse: .5,
+				pulseTravel: .52,
+				dragRotate: false,
+				dragSpeed: 3,
+				shadows: true,
+				shadowStrength: .31,
+				shadowSoftness: 0
+			}, { url: true } );
+
+			// keep the address bar in step with every setting, defaults included, so a link always reproduces the page
+			var urlTimer;
+			effect( function() {
+				var values = params.$snapshot(), query = new URLSearchParams();
+				for( var key in values ) query.set( key, Array.isArray( values[ key ] ) ? values[ key ].join( ',' ) : String( values[ key ] ) );
+				query = query.toString().replace( /%2C/g, ',' );
+				clearTimeout( urlTimer );
+				urlTimer = setTimeout( function() {
+					history.replaceState( null, '', location.pathname + ( query ? '?' + query : '' ) + location.hash );
+				}, 250 );
 			} );
 
 			// shared by every sprite material, so one write updates them all
@@ -594,6 +1311,8 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 			};
 
 			effect( function() { dof.aperture.value = params.aperture(); } );
+			effect( function() { var p = params.pulse(); if( material ) material.uniforms.pulseAmount.value = p; } );
+			effect( function() { var k = params.shadowSoftness(); if( material ) material.uniforms.shadowSoftness.value = k; } );
 
 			function renderDendrite() {
 
@@ -606,17 +1325,14 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 
 			}
 
+			// the whole page, so the panel and the keys still work in fullscreen; a second call leaves it
 			function fullscreen() {
 
-				var docElm = container;
-				if (docElm.requestFullscreen) {
-						docElm.requestFullscreen();
-				}
-				else if (docElm.mozRequestFullScreen) {
-						docElm.mozRequestFullScreen();
-				}
-				else if (docElm.webkitRequestFullScreen) {
-						docElm.webkitRequestFullScreen();
+				var page = document.documentElement;
+				if( document.fullscreenElement || document.webkitFullscreenElement ) {
+					( document.exitFullscreen || document.webkitExitFullscreen ).call( document );
+				} else {
+					( page.requestFullscreen || page.webkitRequestFullscreen ).call( page );
 				}
 
 			}
@@ -650,49 +1366,47 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 				gui.addRangeSlider( 'Length', params.length, 1, 200, 1 );
 				gui.addRangeSlider( 'Twistiness', params.twistiness, 0, .3, .001 );
 				gui.addRangeSlider( 'Randomness', params.randomness, 0, .6, .001 );
-				gui.addSelect( 'Finish', params.finish, [ 'metallic', 'solid', 'abstract', 'cloudy', 'fuzzy' ], { randomizable: false } );
+				gui.addSelect( 'Finish', params.finish, [ 'solid', 'cloudy', 'velvet', 'glossy', 'bubble', 'cell', 'ink', 'abstract', 'metallic' ], { randomizable: false } );
 				gui.addButton( 'Render', renderDendrite );
 				gui.addSection( 'Depth of field' );
 				gui.addSlider( 'Aperture', params.aperture, 0, .5, .005, { randomizable: false } );
+				gui.addSection( 'Shadows' );
+				gui.addCheckbox( 'Cast shadows', params.shadows, { randomizable: false } );
+				gui.addSlider( 'Strength', params.shadowStrength, 0, 1, .01, { randomizable: false, title: 'How dark a fully shadowed sprite gets' } );
+				gui.addSlider( 'Softness', params.shadowSoftness, 0, .5, .01, { randomizable: false, title: 'How fast shadows blur with distance from what casts them' } );
+				gui.addSection( 'Motion' );
+				gui.addCheckbox( 'Bend', params.bend, { randomizable: false } );
+				gui.addSlider( 'Lag', params.bendLag, .15, 1.5, .01, { randomizable: false, title: 'Seconds for a turn at the root to reach the tips' } );
+				gui.addSlider( 'Damping', params.bendDamping, .05, 1.5, .01, { randomizable: false, title: 'Below about .5 the arms wobble; around 1 they settle' } );
+				gui.addSlider( 'Drag', params.bendDrag, 0, 1, .01, { randomizable: false, title: 'How far the arms curl back while spinning' } );
+				gui.addSlider( 'Steadiness', params.steadiness, 0, 3, .01, { randomizable: false, title: 'Seconds over which the spin settles into a new direction; swings are at least 1.5x this apart' } );
+				gui.addSlider( 'Kick', params.kick, 0, 15, .1, { randomizable: false, title: 'How hard a beat whips the arms' } );
+				gui.addCheckbox( 'Swing', params.swing, { randomizable: false, title: 'Hard beats reverse the spin' } );
+				gui.addSlider( 'Swing threshold', params.swingThreshold, .2, 1, .01, { randomizable: false, title: 'How hard a beat must be to reverse the spin', visibleWhen: function() { return params.swing(); } } );
+				gui.addSlider( 'Pulse', params.pulse, 0, 1.5, .01, { randomizable: false, title: 'How much the arms swell on a beat (needs Pulsate)' } );
+				gui.addSlider( 'Pulse travel', params.pulseTravel, 0, 2, .01, { randomizable: false, title: 'Seconds for a swell to run from the root to the longest tip' } );
+				gui.addCheckbox( 'Drag to rotate', params.dragRotate, { randomizable: false, title: 'Dragging turns the dendrite instead of the camera; the music takes over again after you let go' } );
+				gui.addSlider( 'Drag speed', params.dragSpeed, .5, 10, .1, { randomizable: false, title: 'How far a drag turns the dendrite', visibleWhen: function() { return params.dragRotate(); } } );
+				gui.addSection( 'Music' );
+				var song = gui.addFileButton( 'Load song…', loadAudioFile, { accept: 'audio/*' } );
+				song.el.title = 'Pick an audio file, or drop one anywhere on the panel';
 				gui.addSection( 'Actions', { open: false } );
 				gui.addCheckbox( 'Animate', params.animate, { randomizable: false } );
-				gui.addCheckbox( 'Pulsate', params.pulsate, { randomizable: false } );
+				gui.addCheckbox( 'Pulsate', params.pulsate, { randomizable: false, title: 'Swell the arms on every beat' } );
 				gui.addCheckbox( 'Particles', params.particles, { randomizable: false } );
-				gui.addButton( 'Fullscreen', fullscreen );
+				gui.addButton( 'Fullscreen (F)', fullscreen );
+				gui.addButton( 'Copy link', function() { copyText( location.href ); } );
 
-				var dropzone = container;
+				bindKey( 'Tab', function() { document.body.classList.toggle( 'ui-hidden' ); }, { preventDefault: true } );
+				bindKey( 'KeyF', fullscreen );
 
-				dropzone.addEventListener('dragenter', function(event){
-					this.style.backgroundColor = 'rgba( 255,255,255,.2 )';
-				}, true );
-
-				dropzone.addEventListener('dragleave', function(event){
-					this.style.backgroundColor = 'transparent';
-				}, true );
-
-				dropzone.addEventListener('dragover', function(event) {
-					this.style.backgroundColor = 'rgba( 255,255,255,.2 )';
-					event.preventDefault();
-				}, true);
-
-				dropzone.addEventListener('drop', function(event) {
-
-					loading.style.opacity = 1;
-
-					this.style.backgroundColor = 'transparent';
-					event.preventDefault();
-					var allTheFiles = event.dataTransfer.files;
-					var reader = new FileReader();
-					reader.onload = function(e) {
-						try {
-							loadAudio( this.result );
-						} catch( e ) {
-							alert( 'Couldn\'t read that file. Make sure it\'s an mp3 or ogg file (Chrome) or ogg file (Firefox).' );
-							start();
-						}
-					};
-					reader.readAsDataURL( allTheFiles[ 0 ] );
-				}, true);
+				acceptAudioDrops( container, function( on ) {
+					container.style.backgroundColor = on ? 'rgba( 255,255,255,.2 )' : '';
+				} );
+				acceptAudioDrops( document.getElementById( 'gui' ), function( on ) {
+					song.el.style.background = on ? 'var(--gui-btn-hover)' : '';
+					song.el.style.outline = on ? '1px dashed var(--gui-fg)' : '';
+				} );
 
 				camera = new THREE.PerspectiveCamera( 70, window.innerWidth / window.innerHeight, 1, 5000 );
 				camera.position.z = 1000;
@@ -700,6 +1414,7 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 
 				scene = new THREE.Scene();
 
+				createSprites();
 				renderDendrite();
 				effect( function() { applyFinish( params.finish() ); } );
 
@@ -707,6 +1422,18 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 				renderer.setSize( window.innerWidth, window.innerHeight );
 
 				container.appendChild( renderer.domElement );
+				createShadows();
+
+				dragCamera = new THREE.PerspectiveCamera();
+				dragControls = new TrackballControls( dragCamera, renderer.domElement );
+				dragControls.noZoom = true;
+				dragControls.noPan = true;
+				dragCamera.position.set( 0, 0, 1000 );
+				dragControls.update();
+				dragControls.addEventListener( 'start', grabDendrite );
+				dragControls.addEventListener( 'end', releaseDendrite );
+				effect( function() { setDragRotate( params.dragRotate() ); } );
+				effect( function() { dragControls.rotateSpeed = params.dragSpeed(); } );
 
 				stats = new Stats();
 				stats.domElement.style.position = 'absolute';
@@ -748,46 +1475,24 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 
 			function createParticles() {
 
-				// bokeh discs keep a hard edge when defocused, so they only grow
-				var texture = loadTexture( 'coc.png' );
-
 				var size = 2000;
 				particlesMesh = new THREE.Object3D();
-				for( var j = 0; j < 100; j++ ) {
+				for( var j = 0; j < PARTICLES; j++ ) {
 
 					var z = ( .5 - Math.random() ) * size;
-					var material = new THREE.ShaderMaterial( {
-
-						uniforms: {
-
-							middle: { value: texture },
-							blurred: { value: texture },
-							scale: { value: 1 },
-							originalScale: { value: 1 },
-							impulse: { value: 0 },
-							colour: { value: new THREE.Vector3( 255, 255, 255 ) },
-							baseColour: { value: new THREE.Vector3( 0,0,0 ) },
-							rotation: { value: 0 },
-							opacity: { value: .2 + Math.random() * .2 },
-							resolution: { value: new THREE.Vector2( window.innerWidth, window.innerHeight ) },
-							fadeZ: { value: 1 },
-							focusDistance: dof.focusDistance,
-							aperture: dof.aperture,
-							maxCoc: dof.maxCoc
-
-						},
-						vertexShader: document.getElementById( 'vs-particles' ).textContent,
-						fragmentShader: document.getElementById( 'fs-particles' ).textContent,
-						transparent: true
-
-					} );
-
+					var opacity = .2 + Math.random() * .2;
 					var s = 100 + Math.random() * 100;
-					var plane = new THREE.Mesh( new THREE.PlaneGeometry( s, s ), material );
-					plane.position.set( ( .5 - Math.random() ) * size, ( .5 - Math.random() ) * size, z );
-					particlesMesh.add( plane );
+					var o = j * STRIDE;
+					spriteData[ o ] = ( .5 - Math.random() ) * size;
+					spriteData[ o + 1 ] = ( .5 - Math.random() ) * size;
+					spriteData[ o + 2 ] = z;
+					spriteData[ o + 3 ] = 1;
+					spriteData[ o + 4 ] = 0;
+					spriteData[ o + 5 ] = s;
+					spriteData[ o + 6 ] = opacity;
+					spriteData[ o + 7 ] = 1;
+
 				}
-				scene.add( particlesMesh );
 
 			}
 
@@ -798,15 +1503,8 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 
 				renderer.setSize( window.innerWidth, window.innerHeight );
 
-				for( var j = 0; j < mesh.children.length; j++ ) {
-					mesh.children[ j ].material.uniforms.resolution.value.set( window.innerWidth, window.innerHeight );
-				}
-
-				if( particlesMesh ) {
-					for( var j = 0; j < particlesMesh.children.length; j++ ) {
-						particlesMesh.children[ j ].material.uniforms.resolution.value.set( window.innerWidth, window.innerHeight );
-					}
-				}
+				material.uniforms.resolution.value.set( window.innerWidth, window.innerHeight );
+				dragControls.handleResize();
 
 			}
 
@@ -912,6 +1610,7 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 				hideUI();
 				event.preventDefault();
 
+				if( params.dragRotate() ) return;
 				isUserInteracting = true;
 
 				onPointerDownPointerX = event.clientX;
@@ -948,6 +1647,8 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 
 				event.preventDefault();
 
+				if( params.dragRotate() ) return;
+
 				if( event.touches.length == 2 ) {
 
 					var t = event.touches;
@@ -974,6 +1675,8 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 			}
 
 			function onTouchMove( event ) {
+
+				if( params.dragRotate() ) return;
 
 				if( event.touches.length == 2 ) {
 
@@ -1005,11 +1708,17 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 			}
 
 
-			function animate() {
+			var lastFrame = 0;
+
+			function animate( t ) {
 
 				requestAnimationFrame( animate );
 
-				render();
+				// seconds since the last frame, capped so a backgrounded tab doesn't come back in one jump
+				var dt = lastFrame && t ? Math.min( ( t - lastFrame ) / 1000, .1 ) : 1 / 60;
+				lastFrame = t || 0;
+
+				render( dt );
 				stats.update();
 
 			}
@@ -1021,88 +1730,55 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 				}, 500 );
 			}
 
-			function render() {
+			function render( dt ) {
 
 				time = Date.now();
-				var ellapsedTime = time - startTime;
-				startTime = time;
-				var delta = ellapsedTime / 16;
+				var delta = dt * 62.5;
+				var u = material.uniforms;
 
-				if( particlesMesh.parent && !params.particles() ) {
-					scene.remove( particlesMesh );
-				}
-
-				if( !particlesMesh.parent && params.particles() ) {
-					scene.add( particlesMesh );
-				}
-
-				if( params.pulsate() ) {
-					pulsateTime += delta;
-					for( var j = 0; j < mesh.children.length; j++ ) {
-						mesh.children[ j ].material.uniforms.scale.value = mesh.children[ j ].material.uniforms.originalScale.value + .25 * mesh.children[ j ].material.uniforms.originalScale.value * Math.sin( .1 * j + .05 * pulsateTime );
+				// age the last four beats; a new one pushes out the oldest
+				var ages = u.beatAges.value, strengths = u.beatStrengths.value;
+				ages.addScalar( dt );
+				if( beatPending ) {
+					if( params.pulsate() ) {
+						ages.set( 0, ages.x, ages.y, ages.z );
+						strengths.set( beatPending, strengths.x, strengths.y, strengths.z );
 					}
+					beatPending = 0;
 				}
+				u.pulseDelay.value = params.pulseTravel() / Math.max( 1, maxLevel - 1 );
 
 				if( params.animate() && dancer ) {
 
-					var c = new THREE.Color();
 					var hue = .5 + .5 * Math.sin( .0001 * time );
 					hue += .01 * dancer.getFrequency( 2 );
 					if( hue > .99 ) hue = .99;
-					for( var j = 0; j < mesh.children.length; j++ ) {
-						var u = mesh.children[ j ].material.uniforms;
-						var s = .5 * ( .5 + .5 * Math.sin( .01 * ( .1 * j + .1 * time ) ) );
-						var hsl = HSVToHSL( hue, u.baseColour.value.y - .1 * dancer.getFrequency( 0 ), u.baseColour.value.z + s + dancer.getFrequency( 0 ) )
-						setHSL( mesh.children[ j ].material.uniforms.colour.value, hsl.h, hsl.s, hsl.l );
-					}
+					u.hue.value = hue;
+					u.freq.value = dancer.getFrequency( 0 );
+					u.wavePhase.value = ( .001 * time ) % ( 2 * Math.PI );
+					u.waveAmount.value = 1;
 
-					mesh.rotation.x += delta * .1 * dancer.getFrequency( 0 );
-					mesh.rotation.y += delta * .1 * dancer.getFrequency( 1 );
-					mesh.rotation.z += delta * .1 * dancer.getFrequency( 2 );
-
-					if( particlesMesh ) {
-						particlesMesh.rotation.x += delta * .06 * dancer.getFrequency( 0 );
-						particlesMesh.rotation.y += delta * .06 * dancer.getFrequency( 1 );
-						particlesMesh.rotation.z += delta * .06 * dancer.getFrequency( 2 );
-						var s = 1 + .1 * dancer.getFrequency( 0 );
-						particlesMesh.scale.set( s, s, s );
-					}
-
-					position.x += delta * dancer.getFrequency( 1 );
-					position.y += delta * dancer.getFrequency( 0 );
+					particlesMesh.rotation.x += delta * .06 * dancer.getFrequency( 0 );
+					particlesMesh.rotation.y += delta * .06 * dancer.getFrequency( 1 );
+					particlesMesh.rotation.z += delta * .06 * dancer.getFrequency( 2 );
+					var s = 1 + .1 * dancer.getFrequency( 0 );
+					particlesMesh.scale.set( s, s, s );
 
 					ndistance =  - 1500 + 10000 * .1 * ( dancer.getFrequency( 0, 2 ) );
 
-					/*for( var j = 0; j < indexArray.length; j++ ) {
-						var a = indexArray[ j ];
-						for( var i = a.length - 1; i > 0; i-- ) {
-							var up = mesh.children[ a[ i - 1 ] ].material.uniforms;
-							var uc = mesh.children[ a[ i ] ].material.uniforms;
-							var impulse = up.impulse.value;
-							//impulse = uc.impulse.value + ( impulse - uc.impulse.value ) * .99;
-							//impulse -= .005;
-							if( impulse < uc.originalScale.value ) impulse = uc.originalScale.value;
-							uc.impulse.value = impulse;
-						}
-						var f = .1 * dancer.getFrequency( j );
-						//if( f > .15 ) f = .15;
-						var c = mesh.children[ a[ 0 ] ].material.uniforms;
-						c.impulse.value = f;
-						for( var i = 0; i < a.length; i++ ) {
-							var uc = mesh.children[ a[ i ] ].material.uniforms;
-							uc.scale.value = c.originalScale.value + uc.impulse.value;
-						}
-					}*/
-
 				}
+
+				if( params.dragRotate() ) dragControls.update();
+				updateSwing();
+				updateBend( dt );
 
 				if( ndistance < -1500 ) ndistance = -1500;
 				if( ndistance > -500 ) ndistance = -500;
 
-				distance += ( ndistance - distance ) * .1 * delta;
+				distance += ( ndistance - distance ) * ( 1 - Math.pow( 1 - .1, delta ) );
 				dof.focusDistance.value = Math.abs( distance );
 
-				var s = .15 * delta;
+				var s = 1 - Math.pow( 1 - .15, delta );
 				lon += ( nlon - lon ) * s;
 				lat += ( nlat - lat ) * s;
 
@@ -1110,14 +1786,15 @@ filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#7d7e7d', end
 				phi = ( 90 - lat ) * Math.PI / 180;
 				theta = lon * Math.PI / 180;
 
-				if( particlesMesh ) {
-					camera.position.x = distance * Math.sin( phi ) * Math.cos( theta );
-					camera.position.y = distance * Math.cos( phi );
-					camera.position.z = distance * Math.sin( phi ) * Math.sin( theta );
-				}
+				camera.position.x = distance * Math.sin( phi ) * Math.cos( theta );
+				camera.position.y = distance * Math.cos( phi );
+				camera.position.z = distance * Math.sin( phi ) * Math.sin( theta );
 
 				camera.lookAt( camera.target );
 
+				sortSprites();
+				material.uniforms.shadowStrength.value = params.shadows() ? params.shadowStrength() : 0;
+				if( params.shadows() ) renderShadows();
 				renderer.render( scene, camera );
 
 			}
